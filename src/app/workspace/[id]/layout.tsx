@@ -1,26 +1,51 @@
-import { getServerSession } from 'next-auth';
-import { redirect } from 'next/navigation';
+"use client";
+
+import { useState } from 'react';
+import { use } from 'react';
 import { WorkspaceSidebar } from '@/components/workspace/WorkspaceSidebar';
+import { PreviewPanel } from '@/components/workspace/PreviewPanel';
 
-export default async function WorkspaceLayout({
-  children,
-  params,
-}: {
+type LayoutProps = {
   children: React.ReactNode;
-  params: { id: string };
-}) {
-  const session = await getServerSession();
+  params: Promise<{ id: string }>;
+};
 
-  if (!session) {
-    redirect('/auth/signin');
-  }
+export default function WorkspaceLayout({
+  children,
+  params: paramsPromise,
+}: LayoutProps) {
+  const params = use(paramsPromise);
+  const [isPreviewVisible, setIsPreviewVisible] = useState(false);
+
+  const handleDownload = () => {
+    window.location.href = `/api/download/${params.id}`;
+  };
 
   return (
     <div className="min-h-screen flex">
       <WorkspaceSidebar projectId={params.id} />
       <main className="flex-1 overflow-y-auto bg-background">
+        <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-2 flex justify-between">
+          <button
+            onClick={() => setIsPreviewVisible(!isPreviewVisible)}
+            className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+          >
+            {isPreviewVisible ? 'Hide Preview' : 'Show Preview'}
+          </button>
+          <button
+            onClick={handleDownload}
+            className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+          >
+            Download Code
+          </button>
+        </div>
         {children}
       </main>
+      <PreviewPanel
+        projectId={params.id}
+        isVisible={isPreviewVisible}
+        onClose={() => setIsPreviewVisible(false)}
+      />
     </div>
   );
 } 

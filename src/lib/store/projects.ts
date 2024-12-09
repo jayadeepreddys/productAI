@@ -185,6 +185,12 @@ class ProjectStore {
       localStorage.setItem('project_components', JSON.stringify(this.components));
     }
   }
+
+  deleteProject(projectId: string) {
+    const projects = this.getProjects();
+    const updatedProjects = projects.filter(project => project.id !== projectId);
+    localStorage.setItem('projects', JSON.stringify(updatedProjects));
+  }
 }
 
 export interface PageData {

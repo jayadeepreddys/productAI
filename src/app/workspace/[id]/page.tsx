@@ -2,6 +2,7 @@
 
 import { use } from 'react';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { ProjectData } from '@/types/project';
 import { projectStore } from '@/lib/store/projects';
 
@@ -66,6 +67,70 @@ export default function WorkspaceOverview({ params }: PageProps) {
                 <dd className="text-sm text-gray-900">{project.repoName}</dd>
               </div>
             </dl>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white p-6 rounded-lg shadow">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">API Routes</h2>
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-medium text-gray-700">Workspace API</h3>
+                <code className="block mt-1 text-xs bg-gray-50 p-2 rounded">
+                  GET /api/workspace/{project.id}
+                </code>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-700">Pages API</h3>
+                <code className="block mt-1 text-xs bg-gray-50 p-2 rounded">
+                  GET /api/workspace/{project.id}/pages
+                </code>
+                <code className="block mt-1 text-xs bg-gray-50 p-2 rounded">
+                  POST /api/workspace/{project.id}/pages
+                </code>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-700">Components API</h3>
+                <code className="block mt-1 text-xs bg-gray-50 p-2 rounded">
+                  GET /api/workspace/{project.id}/components
+                </code>
+                <code className="block mt-1 text-xs bg-gray-50 p-2 rounded">
+                  POST /api/workspace/{project.id}/components
+                </code>
+              </div>
+              <Link
+                href={`/workspace/${project.id}/api`}
+                className="block mt-4 text-sm text-primary hover:text-primary/90 font-medium"
+              >
+                View API Documentation →
+              </Link>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-lg shadow">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Pages</h2>
+            <div className="space-y-2">
+              <p className="text-sm text-gray-500">Manage your project pages and layouts</p>
+              <Link
+                href={`/workspace/${project.id}/pages`}
+                className="inline-flex items-center text-sm text-primary hover:text-primary/90 font-medium"
+              >
+                View Pages →
+              </Link>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-lg shadow">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Components</h2>
+            <div className="space-y-2">
+              <p className="text-sm text-gray-500">Browse and manage reusable components</p>
+              <Link
+                href={`/workspace/${project.id}/components`}
+                className="inline-flex items-center text-sm text-primary hover:text-primary/90 font-medium"
+              >
+                View Components →
+              </Link>
+            </div>
           </div>
         </div>
       </div>
