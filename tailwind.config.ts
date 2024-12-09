@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import { defaultTheme } from "./src/config/theme";
 
 export default {
   content: [
@@ -9,9 +10,20 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: "var(--background)",
-        foreground: "var(--foreground)",
+        primary: 'var(--color-primary)',
+        secondary: 'var(--color-secondary)',
+        background: 'var(--color-background)',
+        foreground: 'var(--color-foreground)',
+        success: 'var(--color-success)',
+        error: 'var(--color-error)',
+        warning: 'var(--color-warning)',
+        info: 'var(--color-info)',
       },
+      fontFamily: {
+        sans: [defaultTheme.fontFamily.sans],
+        mono: [defaultTheme.fontFamily.mono],
+      },
+      borderRadius: defaultTheme.borderRadius,
     },
   },
   plugins: [],
