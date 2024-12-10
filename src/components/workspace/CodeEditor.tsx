@@ -1,32 +1,40 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import Editor from '@monaco-editor/react';
+import { useEffect, useRef } from 'react';
+import Editor, { Monaco } from '@monaco-editor/react';
 
 interface CodeEditorProps {
-  initialValue: string;
-  language: string;
+  value: string;
   onChange: (value: string) => void;
+  language?: string;
 }
 
-export function CodeEditor({ initialValue, language, onChange }: CodeEditorProps) {
-  const [mounted, setMounted] = useState(false);
+export function CodeEditor({ value, onChange, language = 'typescript' }: CodeEditorProps) {
+  const editorRef = useRef(null);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const handleEditorDidMount = (editor: any, monaco: Monaco) => {
+    editorRef.current = editor;
+    
+    // Configure editor settings
+    monaco.editor.defineTheme('customTheme', {
+      base: 'vs',
+      inherit: true,
+      rules: [],
+      colors: {
+        'editor.background': '#ffffff',
+      }
+    });
 
-  if (!mounted) {
-    return null;
-  }
+    monaco.editor.setTheme('customTheme');
+  };
 
   return (
     <Editor
-      height="70vh"
+      height="100%"
       defaultLanguage={language}
-      defaultValue={initialValue}
-      theme="vs-dark"
+      value={value}
       onChange={(value) => onChange(value || '')}
+      onMount={handleEditorDidMount}
       options={{
         minimap: { enabled: false },
         fontSize: 14,
@@ -34,6 +42,10 @@ export function CodeEditor({ initialValue, language, onChange }: CodeEditorProps
         roundedSelection: false,
         scrollBeyondLastLine: false,
         automaticLayout: true,
+        wordWrap: 'on',
+        tabSize: 2,
+        suggestOnTriggerCharacters: true,
+        quickSuggestions: true,
       }}
     />
   );

@@ -1,4 +1,6 @@
 import { ProjectData } from '@/types/project';
+import { samplePages } from './templates';
+import { sampleTemplates } from './templates';
 
 interface ComponentData {
   id: string;
@@ -34,7 +36,19 @@ class ProjectStore {
       }
     }
   }
-
+  private addDefaultPages(projectId: string) {
+    const template = sampleTemplates.basic;
+    template.pages.forEach(page => {
+      this.addPage(projectId, {
+        name: page.name,
+        path: page.path,
+        description: page.description,
+        components: page.components,
+        apis: page.apis,
+        content: page.content
+      });
+    });
+  }
   static getInstance(): ProjectStore {
     if (!ProjectStore.instance) {
       ProjectStore.instance = new ProjectStore();
@@ -48,9 +62,17 @@ class ProjectStore {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
     };
-
+  
     this.projects.push(newProject);
-    this.pages[newProject.id] = []; // Initialize empty pages array for the project
+    this.pages[newProject.id] = [];
+    this.components[newProject.id] = [];
+    
+    // Add default pages from template
+    this.addDefaultPages(newProject.id);
+    
+    this.saveToStorage();
+    return newProject;
+    
     this.saveToStorage();
     return newProject;
   }

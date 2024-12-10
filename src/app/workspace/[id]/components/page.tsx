@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { PreviewModal } from '@/components/workspace/PreviewModal';
+import { LivePreview } from '@/components/workspace/LivePreview';
 import { samplesStore } from '@/lib/store/samples';
 import { projectStore, ComponentItem } from '@/lib/store/projects';
 
@@ -163,14 +163,14 @@ export default function WorkspaceComponents() {
       </div>
 
       {/* Preview Modal */}
-      <PreviewModal
-        isOpen={isPreviewOpen}
-        onClose={() => setIsPreviewOpen(false)}
-        title={selectedSample?.name || ''}
-        description={selectedSample?.description || ''}
-        preview={selectedSample?.preview || ''}
-        code={selectedSample?.code}
-      />
+      {selectedSample && (
+        <div className="mt-4">
+          <LivePreview 
+            content={selectedSample.code}
+            showPlaceholder={false}
+          />
+        </div>
+      )}
     </div>
   );
 } 

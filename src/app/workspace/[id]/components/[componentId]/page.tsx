@@ -93,14 +93,57 @@ export default function ComponentEditor({ params: paramsPromise }: { params: Pro
 
     const userMessage = inputValue;
     setInputValue('');
+
+    // Include current component configuration in the prompt
+    const prompt = `
+Current component configuration:
+- Name: ${config.name}
+- Type: ${config.type}
+- Props: ${config.props.map(p => `${p.name}: ${p.type}`).join(', ')}
+- Code:
+\`\`\`typescript
+${config.code}
+\`\`\`
+
+User request: ${userMessage}
+
+Please provide guidance for the component. If code changes are needed, wrap them in a code block using \`\`\`typescript.
+`;
+
     addMessage('user', userMessage);
     setIsProcessing(true);
 
     try {
-      // TODO: Replace with actual Claude/ChatGPT API call
-      const aiResponse = await mockAIResponse(userMessage, config);
-      addMessage('assistant', aiResponse.message);
-      setConfig(prev => ({ ...prev, ...aiResponse.updates }));
+      const aiResponse = await generateText(prompt, 'component');
+      addMessage('assistant', aiResponse);
+
+      // Extract code blocks if present
+      const codeMatch = aiResponse.match(/```typescript\n([\s\S]*?)```/);
+      if (codeMatch) {
+        const newCode = codeMatch[1].trim();
+        setConfig(prev => ({
+          ...prev,
+          code: newCode
+        }));
+      }
+
+      // Update component name if suggested in the response
+      const nameMatch = aiResponse.match(/component name to "([^"]+)"/);
+      if (nameMatch && !config.name) {
+        setConfig(prev => ({
+          ...prev,
+          name: nameMatch[1]
+        }));
+      }
+
+      // Update component type if suggested
+      const typeMatch = aiResponse.toLowerCase().match(/type: (ui|layout|form|data)/);
+      if (typeMatch && !config.type) {
+        setConfig(prev => ({
+          ...prev,
+          type: typeMatch[1]
+        }));
+      }
     } catch (error) {
       addMessage('assistant', 'Sorry, I encountered an error. Please try again.');
     } finally {
