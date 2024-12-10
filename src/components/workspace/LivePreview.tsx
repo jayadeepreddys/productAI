@@ -8,7 +8,7 @@ interface LivePreviewProps {
 }
 
 export function LivePreview({ content, showPlaceholder = true }: LivePreviewProps) {
-  const [width, setWidth] = useState<number>(1024);
+  const [width, setWidth] = useState<number>(375);
   const [error, setError] = useState<string | null>(null);
   const [iframeKey, setIframeKey] = useState(0);
 
@@ -27,6 +27,11 @@ export function LivePreview({ content, showPlaceholder = true }: LivePreviewProp
       });
     }
   }, [content]);
+
+  const openInNewTab = () => {
+    const previewUrl = `/preview?fullscreen=true`;
+    window.open(previewUrl, '_blank');
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -57,14 +62,26 @@ export function LivePreview({ content, showPlaceholder = true }: LivePreviewProp
             Desktop
           </button>
         </div>
-        <button
-          onClick={() => setIframeKey(prev => prev + 1)}
-          className="p-2 text-gray-500 hover:text-gray-700"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={openInNewTab}
+            className="p-2 text-gray-500 hover:text-gray-700"
+            title="Open in new tab"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setIframeKey(prev => prev + 1)}
+            className="p-2 text-gray-500 hover:text-gray-700"
+            title="Refresh preview"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
       </div>
       
       {error ? (

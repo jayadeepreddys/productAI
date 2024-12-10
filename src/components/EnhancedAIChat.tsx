@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { generateText } from '@/lib/services/aiService';
 
 interface Message {
@@ -23,20 +23,33 @@ export default function EnhancedAIChat({ currentContent, onUpdateContent, pageId
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const isInitialMount = useRef(true);
 
   useEffect(() => {
     const savedMessages = localStorage.getItem(`chat_history_${pageId}`);
     if (savedMessages) {
-      const parsedMessages = JSON.parse(savedMessages).map((msg: any) => ({
-        ...msg,
-        timestamp: new Date(msg.timestamp)
-      }));
-      setMessages(parsedMessages);
+      try {
+        const parsedMessages = JSON.parse(savedMessages).map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp)
+        }));
+        setMessages(parsedMessages);
+      } catch (error) {
+        console.error('Error parsing saved messages:', error);
+        localStorage.removeItem(`chat_history_${pageId}`);
+      }
     }
   }, [pageId]);
 
   useEffect(() => {
-    localStorage.setItem(`chat_history_${pageId}`, JSON.stringify(messages));
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    
+    if (messages.length > 0) {
+      localStorage.setItem(`chat_history_${pageId}`, JSON.stringify(messages));
+    }
   }, [messages, pageId]);
 
   const scrollToBottom = () => {
@@ -142,23 +155,26 @@ If suggesting code changes, provide them in a typescript code block.`;
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
-        <h3 className="text-sm font-medium text-gray-700">AI Assistant</h3>
-        <button
-          onClick={() => {
-            localStorage.removeItem(`chat_history_${pageId}`);
-            setMessages([]);
-          }}
-          className="text-xs text-red-600 hover:text-red-800"
-        >
-          Clear History
-        </button>
+    <div className="flex flex-col bg-white h-full">
+      <div className="sticky top-0 z-10 bg-gray-50 border-b">
+        <div className="p-4 flex justify-between items-center">
+          <h3 className="text-sm font-medium text-gray-700">AI Assistant</h3>
+          <button
+            onClick={() => {
+              localStorage.removeItem(`chat_history_${pageId}`);
+              setMessages([]);
+            }}
+            className="text-xs text-red-600 hover:text-red-800"
+          >
+            Clear History
+          </button>
+        </div>
       </div>
       
       <div
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50"
+        style={{ marginBottom: '76px' }}
       >
         {messages.map((message) => (
           <div
@@ -207,24 +223,26 @@ If suggesting code changes, provide them in a typescript code block.`;
         )}
       </div>
 
-      <form onSubmit={handleSendMessage} className="p-4 bg-white border-t">
-        <div className="flex space-x-4">
-          <input
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Type your message..."
-            className="flex-1 min-w-0 rounded-md border border-gray-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            type="submit"
-            disabled={isLoading || !inputValue.trim()}
-            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Send
-          </button>
-        </div>
-      </form>
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg">
+        <form onSubmit={handleSendMessage} className="p-4 max-w-[calc(100%-520px)]">
+          <div className="flex space-x-4">
+            <input
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              placeholder="Type your message..."
+              className="flex-1 min-w-0 rounded-md border border-gray-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              type="submit"
+              disabled={isLoading || !inputValue.trim()}
+              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Send
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 } 

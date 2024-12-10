@@ -22,20 +22,20 @@ interface PageConfig {
 
 export default function PageEditor({ params: paramsPromise }: { params: Promise<{ id: string; pageId: string }> }) {
   const params = use(paramsPromise);
+  const [showPreview, setShowPreview] = useState(false);
+  const [showToast, setShowToast] = useState(false);
   const [config, setConfig] = useState<PageConfig>({
     name: '',
-    layout: 'default',
+    layout: '',
     content: '',
-    isEditingCode: true,
+    isEditingCode: false,
     references: {
       components: [],
       pages: [],
       apis: []
     }
   });
-  const [isLoading, setIsLoading] = useState(true);
-  const [showToast, setShowToast] = useState(false);
-  const [showPreview, setShowPreview] = useState(true);
+  const [showCode, setShowCode] = useState(false);
 
   useEffect(() => {
     const loadPageContent = async () => {
@@ -60,8 +60,6 @@ export default function PageEditor({ params: paramsPromise }: { params: Promise<
         }));
       } catch (error) {
         console.error('Error loading page:', error);
-      } finally {
-        setIsLoading(false);
       }
     };
 
@@ -84,21 +82,19 @@ export default function PageEditor({ params: paramsPromise }: { params: Promise<
     setTimeout(() => setShowToast(false), 3000);
   };
 
-  if (isLoading) {
-    return (
-      <div className="h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-      </div>
-    );
-  }
-
   return (
     <div className="h-screen flex relative">
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col">
-        <div className="border-b border-gray-200 p-4 flex justify-between items-center bg-white">
+      {/* Fixed Header */}
+      <div className="fixed top-0 left-0 right-0 z-10 bg-white border-b border-gray-200">
+        <div className="flex justify-between items-center px-6 py-4">
           <h1 className="text-xl font-medium text-gray-900">Edit Page: {config.name}</h1>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowCode(!showCode)}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+            >
+              {showCode ? 'Hide Code' : 'Show Code'}
+            </button>
             <button
               onClick={() => setShowPreview(!showPreview)}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
@@ -107,23 +103,30 @@ export default function PageEditor({ params: paramsPromise }: { params: Promise<
             </button>
             <button
               onClick={() => handleContentChange(config.content)}
-              className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90"
+              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
             >
               Save Changes
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Main Content Area - Adjusted for fixed header */}
+      <div className={`flex-1 flex flex-col mt-[73px] ${showPreview ? 'mr-[520px]' : ''}`}>
+        {/* Code Editor Section - Hidden by default */}
+        {showCode && (
+          <div className="border-b border-gray-200">
+            <textarea
+              value={config.content}
+              onChange={(e) => handleContentChange(e.target.value)}
+              className="w-full h-[300px] p-4 font-mono text-sm border-0 focus:ring-2 focus:ring-primary focus:border-primary"
+              placeholder="Enter your page content here..."
+            />
+          </div>
+        )}
         
-        <div className="flex-1 p-4">
-          <textarea
-            value={config.content}
-            onChange={(e) => handleContentChange(e.target.value)}
-            className="w-full h-full p-4 font-mono text-sm border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
-            placeholder="Enter your page content here..."
-          />
-        </div>
-        
-        <div className="h-1/3 border-t">
+        {/* AI Chat Section */}
+        <div className="flex-1">
           <EnhancedAIChat 
             currentContent={config.content}
             onUpdateContent={handleContentChange}
@@ -132,20 +135,10 @@ export default function PageEditor({ params: paramsPromise }: { params: Promise<
         </div>
       </div>
 
-      {/* Floating Preview */}
+      {/* Preview Panel */}
       {showPreview && (
-        <div className="fixed top-4 right-4 w-[500px] h-[calc(100vh-32px)] bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-6 bg-gray-100 flex items-center justify-end px-2">
-            <button
-              onClick={() => setShowPreview(false)}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <div className="h-full pt-6">
+        <div className="fixed top-0 right-0 w-[500px] h-screen bg-white border-l border-gray-200 overflow-hidden">
+          <div className="h-full pt-[73px]">
             <LivePreview content={config.content} />
           </div>
         </div>
