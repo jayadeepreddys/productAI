@@ -16,6 +16,7 @@
     "@types/next-auth": "^3.13.0",
     "archiver": "^7.0.1",
     "eventsource-parser": "^3.0.0",
+    "jszip": "^3.10.1",
     "next": "15.0.4",
     "next-auth": "^4.24.11",
     "re-resizable": "^6.10.3",

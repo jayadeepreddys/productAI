@@ -7,6 +7,8 @@ import { projectStore } from '@/lib/store/projects';
 import { LivePreview } from '@/components/workspace/LivePreview';
 import { Toast } from '@/components/ui/Toast';
 import EnhancedAIChat from '@/components/EnhancedAIChat';
+import JSZip from 'jszip';
+import { generateProjectFiles } from '@/lib/utils/projectFiles';
 
 interface PageConfig {
   name: string;
@@ -82,6 +84,32 @@ export default function PageEditor({ params: paramsPromise }: { params: Promise<
     setTimeout(() => setShowToast(false), 3000);
   };
 
+  const handleDownloadCode = async () => {
+    try {
+      const project = projectStore.getProjectById(params.id);
+      if (!project) return;
+
+      const files = generateProjectFiles(project);
+      const zip = new JSZip();
+
+      // Add all files to the zip
+      Object.entries(files).forEach(([path, content]) => {
+        zip.file(path, content);
+      });
+
+      // Generate and download zip
+      const blob = await zip.generateAsync({ type: "blob" });
+      const element = document.createElement('a');
+      element.href = URL.createObjectURL(blob);
+      element.download = `${project.name.toLowerCase().replace(/\s+/g, '-')}-project.zip`;
+      document.body.appendChild(element);
+      element.click();
+      document.body.removeChild(element);
+    } catch (error) {
+      console.error('Error downloading project:', error);
+    }
+  };
+
   return (
     <div className="h-screen flex relative">
       {/* Fixed Header */}
@@ -89,6 +117,12 @@ export default function PageEditor({ params: paramsPromise }: { params: Promise<
         <div className="flex justify-between items-center px-6 py-4">
           <h1 className="text-xl font-medium text-gray-900">Edit Page: {config.name}</h1>
           <div className="flex items-center gap-3">
+            <button
+              onClick={handleDownloadCode}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+            >
+              Download Code
+            </button>
             <button
               onClick={() => setShowCode(!showCode)}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
