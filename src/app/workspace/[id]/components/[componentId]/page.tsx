@@ -1,365 +1,256 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { use } from 'react';
-import { projectStore, ComponentItem } from '@/lib/store/projects';
+import { projectStore } from '@/lib/store/projects';
+import { LivePreviewComponent } from '@/components/workspace/LivePreviewComponent';
+import { Toast } from '@/components/ui/Toast';
+import EnhancedAIChat from '@/components/EnhancedAIChat';
 
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
+// Helper function to generate component code
+function generateComponentCode(name: string, props: Array<{ name: string; type: string }> = []) {
+  const propsString = props.map(p => `${p.name}: ${p.type}`).join(', ');
+  const propsInterface = props.length > 0 ? `\ninterface ${name}Props {\n  ${propsString}\n}\n` : '';
+  const propsParam = props.length > 0 ? `{ ${props.map(p => p.name).join(', ')} }: ${name}Props` : '';
+
+  return `"use client";
+
+import { useState } from 'react';${propsInterface}
+export function ${name}(${propsParam}) {
+  return (
+    <div className="p-4 rounded-lg bg-white shadow-sm">
+      <h2 className="text-lg font-semibold text-gray-900">
+        ${name} Component
+      </h2>
+      <p className="mt-2 text-gray-600">
+        Edit this component to add your content
+      </p>
+    </div>
+  );
+}`;
 }
 
 interface ComponentConfig {
   name: string;
-  type: string;
-  props: {
-    name: string;
-    type: 'string' | 'number' | 'boolean';
-    default?: any;
-  }[];
-  style: {
-    backgroundColor?: string;
-    padding?: string;
-    borderRadius?: string;
-  };
+  type: 'ui' | 'layout' | 'form' | 'data';
+  props: Array<{ name: string; type: string }>;
+  style: Record<string, string>;
   code: string;
 }
 
 const DEFAULT_CONFIG: ComponentConfig = {
   name: '',
-  type: '',
+  type: 'ui',
   props: [],
-  style: {
-    backgroundColor: '#ffffff',
-    padding: '1rem',
-    borderRadius: '0.5rem'
-  },
+  style: {},
   code: ''
 };
 
 export default function ComponentEditor({ params: paramsPromise }: { params: Promise<{ id: string; componentId: string }> }) {
   const params = use(paramsPromise);
   const [config, setConfig] = useState<ComponentConfig>(DEFAULT_CONFIG);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      role: 'assistant',
-      content: "Hi! I'll help you create a new component. What would you like to name it?",
-      timestamp: new Date()
-    }
-  ]);
-  const [inputValue, setInputValue] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const [showCode, setShowCode] = useState(false);
+  const [showPreview, setShowPreview] = useState(true);
+  const [showToast, setShowToast] = useState(false);
+  const [isNewComponent, setIsNewComponent] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  useEffect(() => {
     if (params?.id && params?.componentId) {
-      const components = projectStore.getProjectComponents(params.id);
-      const component = components.find(c => c.id === params.componentId);
-      if (component) {
-        setConfig({
-          name: component.name,
-          type: component.type,
-          props: component.props || [],
-          style: component.style || DEFAULT_CONFIG.style,
-          code: component.code || ''
-        });
+      if (params.componentId === 'new') {
+        setIsNewComponent(true);
+      } else {
+        const components = projectStore.getProjectComponents(params.id);
+        const component = components.find(c => c.id === params.componentId);
+        if (component) {
+          setConfig({
+            name: component.name,
+            type: component.type,
+            props: component.props || [],
+            style: component.style || DEFAULT_CONFIG.style,
+            code: component.code || generateComponentCode(component.name, component.props || [])
+          });
+        }
       }
     }
   }, [params?.id, params?.componentId]);
 
-  const addMessage = (role: 'user' | 'assistant', content: string) => {
-    const newMessage: Message = {
-      id: crypto.randomUUID(),
-      role,
-      content,
-      timestamp: new Date()
-    };
-    setMessages(prev => [...prev, newMessage]);
+  const handleNameSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!config.name.trim()) return;
+
+    // Generate initial component code with the provided name
+    const newCode = generateComponentCode(config.name, []);
+    setConfig(prev => ({
+      ...prev,
+      code: newCode
+    }));
+    setIsNewComponent(false);
   };
 
-  const handleSendMessage = async () => {
-    if (!inputValue.trim()) return;
+  // If it's a new component and name hasn't been set, show the name input form
+  if (isNewComponent) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">Create New Component</h2>
+          <form onSubmit={handleNameSubmit}>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="componentName" className="block text-sm font-medium text-gray-700">
+                  Component Name
+                </label>
+                <input
+                  type="text"
+                  id="componentName"
+                  value={config.name}
+                  onChange={(e) => setConfig(prev => ({ ...prev, name: e.target.value }))}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  placeholder="MyComponent"
+                  pattern="[A-Z][A-Za-z]*"
+                  title="Component name must start with a capital letter and contain only letters"
+                  required
+                />
+                <p className="mt-1 text-sm text-gray-500">
+                  Must start with a capital letter (e.g., Button, CardList)
+                </p>
+              </div>
+              <div>
+                <label htmlFor="componentType" className="block text-sm font-medium text-gray-700">
+                  Component Type
+                </label>
+                <select
+                  id="componentType"
+                  value={config.type}
+                  onChange={(e) => setConfig(prev => ({ ...prev, type: e.target.value as ComponentConfig['type'] }))}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="ui">UI Component</option>
+                  <option value="layout">Layout Component</option>
+                  <option value="form">Form Component</option>
+                  <option value="data">Data Component</option>
+                </select>
+              </div>
+              <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => router.back()}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary border border-transparent rounded-md hover:bg-primary/90"
+                >
+                  Create Component
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
-    const userMessage = inputValue;
-    setInputValue('');
+  const handleContentChange = (newContent: string) => {
+    setConfig(prev => ({
+      ...prev,
+      code: newContent
+    }));
 
-    // Include current component configuration in the prompt
-    const prompt = `
-Current component configuration:
-- Name: ${config.name}
-- Type: ${config.type}
-- Props: ${config.props.map(p => `${p.name}: ${p.type}`).join(', ')}
-- Code:
-\`\`\`typescript
-${config.code}
-\`\`\`
-
-User request: ${userMessage}
-
-Please provide guidance for the component. If code changes are needed, wrap them in a code block using \`\`\`typescript.
-`;
-
-    addMessage('user', userMessage);
-    setIsProcessing(true);
-
-    try {
-      const aiResponse = await generateText(prompt, 'component');
-      addMessage('assistant', aiResponse);
-
-      // Extract code blocks if present
-      const codeMatch = aiResponse.match(/```typescript\n([\s\S]*?)```/);
-      if (codeMatch) {
-        const newCode = codeMatch[1].trim();
-        setConfig(prev => ({
-          ...prev,
-          code: newCode
-        }));
-      }
-
-      // Update component name if suggested in the response
-      const nameMatch = aiResponse.match(/component name to "([^"]+)"/);
-      if (nameMatch && !config.name) {
-        setConfig(prev => ({
-          ...prev,
-          name: nameMatch[1]
-        }));
-      }
-
-      // Update component type if suggested
-      const typeMatch = aiResponse.toLowerCase().match(/type: (ui|layout|form|data)/);
-      if (typeMatch && !config.type) {
-        setConfig(prev => ({
-          ...prev,
-          type: typeMatch[1]
-        }));
-      }
-    } catch (error) {
-      addMessage('assistant', 'Sorry, I encountered an error. Please try again.');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  // Mock AI response - Replace with actual API call
-  const mockAIResponse = async (message: string, currentConfig: ComponentConfig) => {
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
-    
-    if (!currentConfig.name) {
-      return {
-        message: `Great! I'll set the component name to "${message}". What type of component is this? (UI, Layout, Form, or Data)`,
-        updates: { name: message }
-      };
-    }
-
-    if (!currentConfig.type) {
-      const type = message.toLowerCase();
-      if (['ui', 'layout', 'form', 'data'].includes(type)) {
-        return {
-          message: `Perfect! Now, let's define the props for your component. What properties should it have? For example: "title: string, isActive: boolean"`,
-          updates: { type }
-        };
-      } else {
-        return {
-          message: "Please choose one of: UI, Layout, Form, or Data",
-          updates: {}
-        };
-      }
-    }
-
-    if (currentConfig.props.length === 0) {
-      // Parse props from message
-      const propDefinitions = message.split(',').map(prop => {
-        const [name, type] = prop.trim().split(':').map(s => s.trim());
-        return {
-          name,
-          type: type.toLowerCase() as 'string' | 'number' | 'boolean'
-        };
+    // Update the project store
+    if (params.componentId === 'new') {
+      // Logic to add a new component
+      projectStore.addComponent(params.id, {
+        ...config,
+        code: newContent
       });
-
-      return {
-        message: "Great! I'll generate some code for your component. Would you like to customize the styling?",
-        updates: { 
-          props: propDefinitions,
-          code: generateComponentCode(currentConfig.name, propDefinitions)
-        }
-      };
+    } else {
+      // Logic to update an existing component
+      projectStore.updateComponent(params.id, params.componentId, {
+        code: newContent
+      });
     }
-
-    // Handle style customization
-    if (message.toLowerCase().includes('yes')) {
-      return {
-        message: "What styling would you like? You can specify background color, padding, and border radius.",
-        updates: {}
-      };
-    }
-
-    // Parse style properties
-    const styleUpdates = {};
-    if (message.includes('background')) {
-      styleUpdates['backgroundColor'] = message.match(/#[0-9a-f]{6}/i)?.[0] || '#ffffff';
-    }
-    if (message.includes('padding')) {
-      styleUpdates['padding'] = message.match(/\d+rem/)?.[0] || '1rem';
-    }
-    if (message.includes('radius')) {
-      styleUpdates['borderRadius'] = message.match(/\d+rem/)?.[0] || '0.5rem';
-    }
-
-    return {
-      message: "I've updated the styling. Would you like to create this component now?",
-      updates: { 
-        style: { ...currentConfig.style, ...styleUpdates }
-      }
-    };
-  };
-
-  const generateComponentCode = (name: string, props: ComponentConfig['props']) => {
-    const propsString = props.map(p => `${p.name}: ${p.type}`).join(', ');
-    return `
-interface ${name}Props {
-  ${propsString}
-}
-
-export function ${name}({ ${props.map(p => p.name).join(', ')} }: ${name}Props) {
-  return (
-    <div className="p-4 rounded-lg bg-white">
-      {/* Add your component content here */}
-    </div>
-  );
-}
-    `.trim();
+    
+    // Show toast
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
   };
 
   return (
-    <div className="h-screen flex">
-      {/* Chat Interface - Left Side */}
-      <div className="w-1/2 flex flex-col border-r border-gray-200">
-        <div className="border-b border-gray-200 p-4">
+    <div className="h-screen flex relative">
+      {/* Fixed Header */}
+      <div className="fixed top-0 left-0 right-0 z-10 bg-white border-b border-gray-200">
+        <div className="flex justify-between items-center px-6 py-4">
           <h1 className="text-xl font-medium text-gray-900">
-            {params.componentId === 'new' ? 'Create New Component' : 'Edit Component'}
+            {params.componentId === 'new' ? 'Create New Component' : `Edit Component: ${config.name}`}
           </h1>
-        </div>
-
-        {/* Messages Container */}
-        <div 
-          ref={chatContainerRef}
-          className="flex-1 overflow-y-auto p-4 space-y-4"
-        >
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-[80%] rounded-lg p-4 ${
-                  message.role === 'user'
-                    ? 'bg-primary text-white'
-                    : 'bg-gray-100 text-gray-900'
-                }`}
-              >
-                <div className="whitespace-pre-wrap">{message.content}</div>
-                <div className="text-xs mt-1 opacity-70">
-                  {message.timestamp.toLocaleTimeString()}
-                </div>
-              </div>
-            </div>
-          ))}
-          {isProcessing && (
-            <div className="flex justify-start">
-              <div className="bg-gray-100 rounded-lg p-4">
-                <div className="animate-pulse">Thinking...</div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Input Area */}
-        <div className="border-t border-gray-200 p-4">
-          <div className="flex space-x-4">
-            <input
-              type="text"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-              placeholder="Type your message..."
-              className="flex-1 rounded-lg border border-gray-300 p-2 focus:ring-2 focus:ring-primary focus:border-primary"
-            />
+          <div className="flex items-center gap-3">
             <button
-              onClick={handleSendMessage}
-              disabled={isProcessing || !inputValue.trim()}
-              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50"
+              onClick={() => setShowCode(!showCode)}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
             >
-              Send
+              {showCode ? 'Hide Code' : 'Show Code'}
+            </button>
+            <button
+              onClick={() => setShowPreview(!showPreview)}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+            >
+              {showPreview ? 'Hide Preview' : 'Show Preview'}
+            </button>
+            <button
+              onClick={() => handleContentChange(config.code)}
+              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+            >
+              Save Changes
             </button>
           </div>
         </div>
       </div>
 
-      {/* Preview - Right Side */}
-      <div className="w-1/2 bg-gray-50 p-6">
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Component Preview</h2>
-          
-          {config.name && (
-            <div className="mb-4">
-              <h3 className="text-sm font-medium text-gray-700">Name</h3>
-              <p className="mt-1 text-gray-900">{config.name}</p>
-            </div>
-          )}
-
-          {config.type && (
-            <div className="mb-4">
-              <h3 className="text-sm font-medium text-gray-700">Type</h3>
-              <p className="mt-1 text-gray-900 capitalize">{config.type}</p>
-            </div>
-          )}
-
-          {config.props.length > 0 && (
-            <div className="mb-4">
-              <h3 className="text-sm font-medium text-gray-700">Props</h3>
-              <ul className="mt-1 space-y-1">
-                {config.props.map((prop, index) => (
-                  <li key={index} className="text-gray-900">
-                    {prop.name}: <span className="text-primary">{prop.type}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {config.code && (
-            <div className="mb-4">
-              <h3 className="text-sm font-medium text-gray-700">Generated Code</h3>
-              <pre className="mt-1 p-4 bg-gray-50 rounded-lg overflow-x-auto">
-                <code className="text-sm">{config.code}</code>
-              </pre>
-            </div>
-          )}
-
-          {config.name && config.type && config.props.length > 0 && (
-            <button
-              onClick={() => {
-                projectStore.addComponent(params.id, config);
-                router.push(`/workspace/${params.id}/components`);
-              }}
-              className="w-full mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90"
-            >
-              Create Component
-            </button>
-          )}
+      {/* Main Content Area */}
+      <div className={`flex-1 flex flex-col mt-[73px] ${showPreview ? 'mr-[520px]' : ''}`}>
+        {/* Code Editor Section */}
+        {showCode && (
+          <div className="border-b border-gray-200">
+            <textarea
+              value={config.code}
+              onChange={(e) => handleContentChange(e.target.value)}
+              className="w-full h-[300px] p-4 font-mono text-sm border-0 focus:ring-2 focus:ring-primary focus:border-primary"
+              placeholder="Enter your component code here..."
+            />
+          </div>
+        )}
+        
+        {/* AI Chat Section */}
+        <div className="flex-1">
+          <EnhancedAIChat 
+            currentContent={config.code}
+            onUpdateContent={handleContentChange}
+            pageId={params.componentId}
+            contextType="component"
+          />
         </div>
       </div>
+
+      {/* Preview Panel */}
+      {showPreview && (
+          <div className="fixed top-0 right-0 w-[500px] h-screen bg-white border-l border-gray-200 overflow-hidden">
+            <div className="h-full pt-[73px]">
+              <LivePreviewComponent content={config.code} type="component" />
+            </div>
+          </div>
+      )}
+
+      {showToast && (
+        <Toast 
+          message="Changes saved successfully!"
+          type="success"
+          onClose={() => setShowToast(false)}
+        />
+      )}
     </div>
   );
 } 

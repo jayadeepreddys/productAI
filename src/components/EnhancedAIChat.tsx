@@ -16,9 +16,15 @@ interface EnhancedAIChatProps {
   currentContent: string;
   onUpdateContent: (content: string) => void;
   pageId: string;
+  contextType?: 'component' | 'page';
 }
 
-export default function EnhancedAIChat({ currentContent, onUpdateContent, pageId }: EnhancedAIChatProps) {
+export default function EnhancedAIChat({ 
+  currentContent, 
+  onUpdateContent, 
+  pageId,
+  contextType = 'page'
+}: EnhancedAIChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -78,7 +84,35 @@ export default function EnhancedAIChat({ currentContent, onUpdateContent, pageId
       setInputValue('');
       setIsLoading(true);
 
-      const contextPrompt = `Current page content:
+      const contextPrompt = contextType === 'component' 
+        ? `You are helping create/modify a React component. 
+
+Please ensure the component follows this structure:
+
+/**
+ * @preview {
+ *   // Add realistic preview data here
+ *   // Example:
+ *   "items": [
+ *     { "id": 1, "title": "Item 1", "description": "Description 1" },
+ *     { "id": 2, "title": "Item 2", "description": "Description 2" }
+ *   ],
+ *   "config": {
+ *     "showHeader": true,
+ *     "maxItems": 5
+ *   }
+ * }
+ */
+
+Current component code:
+\`\`\`typescript
+${currentContent || 'No content yet'}
+\`\`\`
+
+User request: ${userMessage.content}
+
+Provide the complete component code with TypeScript types and JSDoc preview data.`
+        : `Current page content:
 \`\`\`typescript
 ${currentContent || 'No content yet'}
 \`\`\`
@@ -156,25 +190,22 @@ If suggesting code changes, provide them in a typescript code block.`;
 
   return (
     <div className="flex flex-col bg-white h-full">
-      <div className="sticky top-0 z-10 bg-gray-50 border-b">
-        <div className="p-4 flex justify-between items-center">
-          <h3 className="text-sm font-medium text-gray-700">AI Assistant</h3>
-          <button
-            onClick={() => {
-              localStorage.removeItem(`chat_history_${pageId}`);
-              setMessages([]);
-            }}
-            className="text-xs text-red-600 hover:text-red-800"
-          >
-            Clear History
-          </button>
-        </div>
+      <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
+        <h3 className="text-sm font-medium text-gray-700">AI Assistant</h3>
+        <button
+          onClick={() => {
+            localStorage.removeItem(`chat_history_${pageId}`);
+            setMessages([]);
+          }}
+          className="text-xs text-red-600 hover:text-red-800"
+        >
+          Clear History
+        </button>
       </div>
       
       <div
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50"
-        style={{ marginBottom: '76px' }}
       >
         {messages.map((message) => (
           <div
@@ -223,26 +254,24 @@ If suggesting code changes, provide them in a typescript code block.`;
         )}
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg">
-        <form onSubmit={handleSendMessage} className="p-4 max-w-[calc(100%-520px)]">
-          <div className="flex space-x-4">
-            <input
-              type="text"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              placeholder="Type your message..."
-              className="flex-1 min-w-0 rounded-md border border-gray-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              type="submit"
-              disabled={isLoading || !inputValue.trim()}
-              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Send
-            </button>
-          </div>
-        </form>
-      </div>
+      <form onSubmit={handleSendMessage} className="p-4 bg-white border-t">
+        <div className="flex space-x-4">
+          <input
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            placeholder="Type your message..."
+            className="flex-1 min-w-0 rounded-md border border-gray-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button
+            type="submit"
+            disabled={isLoading || !inputValue.trim()}
+            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Send
+          </button>
+        </div>
+      </form>
     </div>
   );
 } 

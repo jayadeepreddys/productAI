@@ -2,66 +2,49 @@
 
 import { useState, useEffect } from 'react';
 
-interface LivePreviewProps {
+interface LivePreviewComponentProps {
   content?: string;
   showPlaceholder?: boolean;
-  type?: 'page' | 'component';
 }
 
-export function LivePreview({ content, showPlaceholder = true, type = 'page' }: LivePreviewProps) {
+export function LivePreviewComponent({ content, showPlaceholder = true }: LivePreviewComponentProps) {
   const [width, setWidth] = useState<number>(375);
   const [error, setError] = useState<string | null>(null);
   const [iframeKey, setIframeKey] = useState(0);
 
   useEffect(() => {
     if (content) {
-      fetch(type === 'component' ? '/api/preview/component' : '/api/preview', {
+      fetch('/api/preview/component', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ content }),
-      })
-      .catch(err => {
-        console.error('Preview error:', err);
-        setError(err.message);
+      }).catch(error => {
+        console.error('Failed to send preview content:', error);
       });
     }
-  }, [content, type]);
+  }, [content]);
 
   const openInNewTab = () => {
-    const previewUrl = type === 'component' ? `/preview/component?fullscreen=true` : `/preview?fullscreen=true`;
+    const previewUrl = `/preview/component?fullscreen=true`;
     window.open(previewUrl, '_blank');
   };
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="h-12 border-b border-gray-200 flex items-center justify-between px-4 bg-white">
-        <div className="flex space-x-2">
-          <button
-            onClick={() => setWidth(375)}
-            className={`px-3 py-1 text-xs font-medium rounded ${
-              width === 375 ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            Mobile
-          </button>
-          <button
-            onClick={() => setWidth(768)}
-            className={`px-3 py-1 text-xs font-medium rounded ${
-              width === 768 ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            Tablet
-          </button>
-          <button
-            onClick={() => setWidth(1024)}
-            className={`px-3 py-1 text-xs font-medium rounded ${
-              width === 1024 ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            Desktop
-          </button>
+    <div className="flex flex-col flex-1">
+      <div className="flex justify-between items-center p-2 border-b">
+        <div className="flex items-center space-x-4">
+          <label className="text-sm text-gray-600">Width:</label>
+          <input
+            type="range"
+            min="375"
+            max="1920"
+            value={width}
+            onChange={(e) => setWidth(Number(e.target.value))}
+            className="w-32"
+          />
+          <span className="text-sm text-gray-600">{width}px</span>
         </div>
         <div className="flex items-center space-x-2">
           <button
@@ -103,7 +86,7 @@ export function LivePreview({ content, showPlaceholder = true, type = 'page' }: 
           >
             <iframe
               key={iframeKey}
-              src={type === 'component' ? '/preview/component' : '/preview'}
+              src="/preview/component"
               className="w-full h-full border-0"
               style={{ height: 'calc(100vh - 3rem)' }}
             />
