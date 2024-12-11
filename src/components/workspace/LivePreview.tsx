@@ -2,66 +2,81 @@
 
 import { useState, useEffect } from 'react';
 
-interface LivePreviewProps {
-  content?: string;
-  showPlaceholder?: boolean;
-  type?: 'page' | 'component';
-}
-
-export function LivePreview({ content, showPlaceholder = true, type = 'page' }: LivePreviewProps) {
-  const [width, setWidth] = useState<number>(375);
+export function LivePreview({ content }: { content: string }) {
   const [error, setError] = useState<string | null>(null);
+  const [isServerAvailable, setIsServerAvailable] = useState(false);
+  const [width, setWidth] = useState<number>(375);
   const [iframeKey, setIframeKey] = useState(0);
 
+  // Check if preview server is available
   useEffect(() => {
-    if (content) {
-      fetch(type === 'component' ? '/api/preview/component' : '/api/preview', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ content }),
-      })
-      .catch(err => {
-        console.error('Preview error:', err);
-        setError(err.message);
-      });
-    }
-  }, [content, type]);
+    const checkServer = async () => {
+      try {
+        const response = await fetch('http://localhost:3001/api/health');
+        if (response.ok) {
+          setIsServerAvailable(true);
+          setError(null);
+        }
+      } catch (err) {
+        console.error('Preview server not available:', err);
+        setError('Preview server is not running. Please start the preview server on port 3001.');
+        setIsServerAvailable(false);
+      }
+    };
+
+    checkServer();
+    const interval = setInterval(checkServer, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Send content to preview server
+  useEffect(() => {
+    if (!content || !isServerAvailable) return;
+
+    fetch('http://localhost:3001/api/update-preview', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ content }),
+    }).catch(err => {
+      console.error('Failed to send content to preview:', err);
+      setError(err.message);
+    });
+  }, [content, isServerAvailable]);
 
   const openInNewTab = () => {
-    const previewUrl = type === 'component' ? `/preview/component?fullscreen=true` : `/preview?fullscreen=true`;
-    window.open(previewUrl, '_blank');
+    window.open('http://localhost:3001', '_blank');
   };
 
+  const refreshPreview = () => {
+    setIframeKey(prev => prev + 1);
+  };
+
+  if (error) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="p-4 bg-red-50 text-red-600 rounded-md">
+          {error}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="h-full flex flex-col">
-      <div className="h-12 border-b border-gray-200 flex items-center justify-between px-4 bg-white">
-        <div className="flex space-x-2">
-          <button
-            onClick={() => setWidth(375)}
-            className={`px-3 py-1 text-xs font-medium rounded ${
-              width === 375 ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            Mobile
-          </button>
-          <button
-            onClick={() => setWidth(768)}
-            className={`px-3 py-1 text-xs font-medium rounded ${
-              width === 768 ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            Tablet
-          </button>
-          <button
-            onClick={() => setWidth(1024)}
-            className={`px-3 py-1 text-xs font-medium rounded ${
-              width === 1024 ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            Desktop
-          </button>
+    <div className="flex flex-col h-full">
+      <div className="flex justify-between items-center p-2 border-b">
+        <div className="flex items-center space-x-4">
+          <label className="text-sm text-gray-600">Width:</label>
+          <input
+            type="range"
+            min="375"
+            max="1920"
+            value={width}
+            onChange={(e) => setWidth(Number(e.target.value))}
+            className="w-32"
+          />
+          <span className="text-sm text-gray-600">{width}px</span>
         </div>
         <div className="flex items-center space-x-2">
           <button
@@ -74,7 +89,7 @@ export function LivePreview({ content, showPlaceholder = true, type = 'page' }: 
             </svg>
           </button>
           <button
-            onClick={() => setIframeKey(prev => prev + 1)}
+            onClick={refreshPreview}
             className="p-2 text-gray-500 hover:text-gray-700"
             title="Refresh preview"
           >
@@ -84,32 +99,20 @@ export function LivePreview({ content, showPlaceholder = true, type = 'page' }: 
           </button>
         </div>
       </div>
-      
-      {error ? (
-        <div className="flex-1 p-4 bg-red-50 text-red-600">
-          <pre className="whitespace-pre-wrap">{error}</pre>
+      <div className="flex-1 bg-gray-100 overflow-auto">
+        <div 
+          className="mx-auto transition-all duration-200 bg-white"
+          style={{ width: `${width}px` }}
+        >
+          <iframe 
+            key={iframeKey}
+            src="http://localhost:3001"
+            className="w-full h-full border-0"
+            sandbox="allow-same-origin allow-scripts"
+            style={{ height: 'calc(100vh - 3rem)' }}
+          />
         </div>
-      ) : !content && showPlaceholder ? (
-        <div className="flex-1 bg-gray-100 p-4">
-          <div className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center text-gray-500">
-            Start editing to see a live preview of your changes
-          </div>
-        </div>
-      ) : (
-        <div className="flex-1 bg-gray-100 overflow-auto">
-          <div 
-            className="mx-auto transition-all duration-200 bg-white"
-            style={{ width: `${width}px` }}
-          >
-            <iframe
-              key={iframeKey}
-              src={type === 'component' ? '/preview/component' : '/preview'}
-              className="w-full h-full border-0"
-              style={{ height: 'calc(100vh - 3rem)' }}
-            />
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 } 
