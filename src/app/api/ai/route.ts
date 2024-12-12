@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import Anthropic from '@anthropic-ai/sdk';
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
@@ -10,45 +11,54 @@ export async function POST(request: Request) {
       throw new Error('ANTHROPIC_API_KEY is not configured');
     }
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-sonnet-20240229',
-        max_tokens: 1024,
-        messages: messages.map(msg => ({
-          role: msg.role === 'system' ? 'assistant' : msg.role,
-          content: msg.content
-        }))
-      }),
+    const client = new Anthropic({
+      apiKey: ANTHROPIC_API_KEY
     });
 
-    const data = await response.json();
+    const response = new TransformStream();
+    const writer = response.writable.getWriter();
+    const encoder = new TextEncoder();
 
-    if (!response.ok) {
-      console.error('Anthropic API error details:', data);
-      throw new Error(`Anthropic API error: ${data.error?.message || response.statusText}`);
-    }
+    // Start the streaming request
+    const messageStream = await client.messages.stream({
+      model: 'claude-3-sonnet-20240229',
+      max_tokens: 4096,
+      messages: messages.map((msg: any) => ({
+        role: msg.role === 'user' ? 'user' : 'assistant',
+        content: msg.content
+      })),
+    });
 
-    if (!data.content || !data.content[0]) {
-      throw new Error('Invalid response from Anthropic API');
-    }
+    // Handle the stream
+    (async () => {
+      try {
+        for await (const chunk of messageStream) {
+          if (chunk.type === 'content_block_delta') {
+            const text = chunk.delta?.text || '';
+            await writer.write(encoder.encode(`data: ${text}\n\n`));
+          }
+        }
+      } catch (error) {
+        console.error('Streaming error:', error);
+        // Send error message through the stream
+        await writer.write(encoder.encode(`data: Error: ${error}\n\n`));
+      } finally {
+        await writer.close();
+      }
+    })();
 
-    return NextResponse.json({ 
-      text: data.content[0].text 
+    return new Response(response.readable, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
     });
 
   } catch (error) {
     console.error('AI generation error:', error);
     return NextResponse.json(
-      { 
-        error: 'Failed to generate AI response',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
+      { error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

@@ -3,13 +3,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { generateText } from '@/lib/services/aiService';
 
+interface CodeBlock {
+  filepath: string;
+  content: string;
+  type: 'component' | 'page' | 'style' | 'config';
+  action: 'create' | 'update';
+}
+
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
-  hasCode?: boolean;
-  codeBlock?: string;
+  codeBlocks?: CodeBlock[];
 }
 
 interface EnhancedAIChatProps {
@@ -29,44 +35,39 @@ export default function EnhancedAIChat({
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  const isInitialMount = useRef(true);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const savedMessages = localStorage.getItem(`chat_history_${pageId}`);
-    if (savedMessages) {
-      try {
-        const parsedMessages = JSON.parse(savedMessages).map((msg: any) => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp)
-        }));
-        setMessages(parsedMessages);
-      } catch (error) {
-        console.error('Error parsing saved messages:', error);
-        localStorage.removeItem(`chat_history_${pageId}`);
-      }
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [pageId]);
-
-  useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-    
-    if (messages.length > 0) {
-      localStorage.setItem(`chat_history_${pageId}`, JSON.stringify(messages));
-    }
-  }, [messages, pageId]);
-
-  const scrollToBottom = () => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
-  };
-
-  useEffect(() => {
-    scrollToBottom();
   }, [messages]);
+
+  const getSystemPrompt = () => {
+    return `You are an expert Next.js developer. When providing code, please follow these guidelines:
+
+1. Always use TypeScript
+2. Always wrap code blocks with triple backticks and include the filepath, like:
+\`\`\`typescript:src/components/Example.tsx
+// code here
+\`\`\`
+
+3. For components:
+   - Include proper TypeScript interfaces
+   - Use modern React patterns (hooks, functional components)
+   - Include JSDoc comments with @preview data
+   - Follow Next.js 14 conventions
+
+4. For pages:
+   - Use the App Router format
+   - Include proper metadata exports
+   - Follow Next.js 14 file conventions
+
+Current ${contextType} content:
+\`\`\`typescript
+${currentContent || '// No content yet'}
+\`\`\``;
+  };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,61 +76,32 @@ export default function EnhancedAIChat({
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: inputValue.trim(),
-      timestamp: new Date(),
+      content: inputValue,
+      timestamp: new Date()
     };
 
+    setMessages(prev => [...prev, userMessage]);
+    setInputValue('');
+    setIsLoading(true);
+
     try {
-      setMessages(prev => [...prev, userMessage]);
-      setInputValue('');
-      setIsLoading(true);
-
-      const contextPrompt = contextType === 'component' 
-        ? `You are helping create/modify a React component. 
-
-Please ensure the component follows this structure:
-
-/**
- * @preview {
- *   // Add realistic preview data here
- *   // Example:
- *   "items": [
- *     { "id": 1, "title": "Item 1", "description": "Description 1" },
- *     { "id": 2, "title": "Item 2", "description": "Description 2" }
- *   ],
- *   "config": {
- *     "showHeader": true,
- *     "maxItems": 5
- *   }
- * }
- */
-
-Current component code:
-\`\`\`typescript
-${currentContent || 'No content yet'}
-\`\`\`
-
-User request: ${userMessage.content}
-
-Provide the complete component code with TypeScript types and JSDoc preview data.`
-        : `Current page content:
-\`\`\`typescript
-${currentContent || 'No content yet'}
-\`\`\`
-
-User request: ${userMessage.content}
-
-If suggesting code changes, provide them in a typescript code block.`;
-
-      // Stream the response in chunks
-      const response = await generateText(contextPrompt, 'page', true); // Add streaming parameter
-      let fullResponse = '';
+      const systemPrompt = getSystemPrompt();
+      const fullPrompt = `${systemPrompt}\n\nUser request: ${userMessage.content}\n\nProvide your response with code blocks using the specified format.`;
       
-      // Show partial responses as they come in
+      const response = await generateText(fullPrompt, contextType, true);
+      let fullResponse = '';
+      let currentAssistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: '',
+        timestamp: new Date(),
+        codeBlocks: []
+      };
+
       for await (const chunk of response) {
-        fullResponse += chunk;
+        fullResponse += chunk.data;
         
-        // Update the latest assistant message with the accumulated response
+        // Update message content
         setMessages(prev => {
           const messages = [...prev];
           const lastMessage = messages[messages.length - 1];
@@ -140,10 +112,8 @@ If suggesting code changes, provide them in a typescript code block.`;
             };
           } else {
             messages.push({
-              id: Date.now().toString(),
-              role: 'assistant',
-              content: fullResponse,
-              timestamp: new Date()
+              ...currentAssistantMessage,
+              content: fullResponse
             });
           }
           return messages;
@@ -151,18 +121,16 @@ If suggesting code changes, provide them in a typescript code block.`;
       }
 
       // Process code blocks after full response
-      const codeMatch = fullResponse.match(/```typescript\n([\s\S]*?)```/);
-      const codeBlock = codeMatch ? codeMatch[1].trim() : undefined;
-
-      // Update final message with code block info
+      const codeBlocks = parseCodeBlocks(fullResponse);
+      
+      // Update final message with code blocks
       setMessages(prev => {
         const messages = [...prev];
         const lastMessage = messages[messages.length - 1];
         if (lastMessage.role === 'assistant') {
           messages[messages.length - 1] = {
             ...lastMessage,
-            hasCode: !!codeBlock,
-            codeBlock
+            codeBlocks
           };
         }
         return messages;
@@ -170,105 +138,108 @@ If suggesting code changes, provide them in a typescript code block.`;
 
     } catch (error) {
       console.error('Chat error:', error);
-      const errorMessage: Message = {
+      setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: error instanceof Error ? error.message : 'An error occurred while processing your request.',
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
+        content: error instanceof Error ? error.message : 'An error occurred',
+        timestamp: new Date()
+      }]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleApplyChanges = (codeBlock: string) => {
+  const parseCodeBlocks = (text: string): CodeBlock[] => {
+    const blocks: CodeBlock[] = [];
+    const regex = /```(?:typescript|tsx|ts):([^\n]+)\n([\s\S]*?)```/g;
+    let match;
+
+    while ((match = regex.exec(text)) !== null) {
+      const [_, filepath, content] = match;
+      if (filepath && content) {
+        blocks.push({
+          filepath: filepath.trim(),
+          content: content.trim(),
+          type: getFileType(filepath),
+          action: 'create' // You might want to determine this based on file existence
+        });
+      }
+    }
+
+    return blocks;
+  };
+
+  const getFileType = (filepath: string): CodeBlock['type'] => {
+    if (filepath.includes('/components/')) return 'component';
+    if (filepath.includes('/app/')) return 'page';
+    if (filepath.includes('.css') || filepath.includes('.scss')) return 'style';
+    return 'config';
+  };
+
+  const handleApplyChanges = (codeBlock: CodeBlock) => {
     if (onUpdateContent) {
-      onUpdateContent(codeBlock);
+      onUpdateContent(codeBlock.content);
     }
   };
 
   return (
     <div className="flex flex-col h-full bg-gray-900">
-      <div className="p-4 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
-        <h3 className="text-sm font-medium text-gray-200">AI Assistant</h3>
-        <button
-          onClick={() => {
-            localStorage.removeItem(`chat_history_${pageId}`);
-            setMessages([]);
-          }}
-          className="text-xs text-red-400 hover:text-red-300"
-        >
-          Clear History
-        </button>
-      </div>
-      
-      <div
-        ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-900"
-      >
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
-            <div
-              className={`max-w-[80%] rounded-lg p-4 ${
-                message.role === 'user'
-                  ? 'bg-blue-600 text-gray-100'
-                  : 'bg-gray-800 text-gray-100 border border-gray-700'
-              }`}
-            >
-              <div className="whitespace-pre-wrap break-words font-mono text-sm">{message.content}</div>
-              {message.hasCode && message.codeBlock && (
-                <div className="mt-4 space-y-2">
-                  <button
-                    onClick={() => handleApplyChanges(message.codeBlock!)}
-                    className="w-full px-3 py-1.5 bg-green-600 text-gray-100 rounded hover:bg-green-700 transition-colors"
-                  >
-                    Apply Changes
-                  </button>
-                  <button
-                    onClick={() => setInputValue("Can you explain these changes?")}
-                    className="w-full px-3 py-1.5 bg-blue-600/30 text-blue-200 rounded hover:bg-blue-600/40 transition-colors"
-                  >
-                    Ask for Explanation
-                  </button>
+          <div key={message.id} className={`flex ${
+            message.role === 'user' ? 'justify-end' : 'justify-start'
+          }`}>
+            <div className={`max-w-[80%] rounded-lg p-4 ${
+              message.role === 'user' 
+                ? 'bg-blue-600 text-white' 
+                : 'bg-gray-800 text-white'
+            }`}>
+              <div className="prose prose-invert max-w-none">
+                {message.content}
+              </div>
+              {message.codeBlocks && message.codeBlocks.length > 0 && (
+                <div className="mt-4 space-y-4">
+                  {message.codeBlocks.map((block, index) => (
+                    <div key={index} className="border border-gray-700 rounded-lg overflow-hidden">
+                      <div className="bg-gray-700 px-4 py-2 flex justify-between items-center">
+                        <span className="text-sm font-mono">{block.filepath}</span>
+                        <button
+                          onClick={() => handleApplyChanges(block)}
+                          className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                        >
+                          Apply Changes
+                        </button>
+                      </div>
+                      <pre className="p-4 bg-gray-900 overflow-x-auto">
+                        <code className="text-sm text-gray-300">
+                          {block.content}
+                        </code>
+                      </pre>
+                    </div>
+                  ))}
                 </div>
               )}
-              <div className="text-xs mt-1 text-gray-400">
-                {message.timestamp.toLocaleTimeString()}
-              </div>
             </div>
           </div>
         ))}
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-              <div className="flex items-center space-x-2 text-gray-300">
-                <div className="animate-pulse">Thinking</div>
-                <div className="animate-bounce">...</div>
-              </div>
-            </div>
-          </div>
-        )}
+        <div ref={messagesEndRef} />
       </div>
 
-      <form onSubmit={handleSendMessage} className="p-4 bg-gray-800 border-t border-gray-700">
+      <form onSubmit={handleSendMessage} className="border-t border-gray-800 p-4">
         <div className="flex space-x-4">
           <input
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
+            className="flex-1 bg-gray-800 text-white rounded px-4 py-2"
             placeholder="Type your message..."
-            className="flex-1 min-w-0 rounded-md bg-gray-700 border border-gray-600 px-4 py-2 text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
           <button
             type="submit"
-            disabled={isLoading || !inputValue.trim()}
-            className="px-4 py-2 bg-blue-600 text-gray-100 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            disabled={isLoading}
           >
-            Send
+            {isLoading ? 'Sending...' : 'Send'}
           </button>
         </div>
       </form>
