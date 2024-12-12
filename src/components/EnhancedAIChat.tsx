@@ -31,17 +31,40 @@ export default function EnhancedAIChat({
   pageId,
   contextType = 'page'
 }: EnhancedAIChatProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (typeof window === 'undefined') return [];
+    const saved = localStorage.getItem(`chat_history_${pageId}`);
+    return saved ? JSON.parse(saved) : [];
+  });
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
+    const scrollToBottom = () => {
+      if (chatContainerRef.current) {
+        const { scrollHeight, clientHeight } = chatContainerRef.current;
+        chatContainerRef.current.scrollTo({
+          top: scrollHeight - clientHeight,
+          behavior: 'smooth'
+        });
+      }
+    };
+
+    // Scroll on new messages
+    scrollToBottom();
+    
+    // Also scroll after a short delay to handle content loading
+    const timeoutId = setTimeout(scrollToBottom, 100);
+    return () => clearTimeout(timeoutId);
   }, [messages]);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      localStorage.setItem(`chat_history_${pageId}`, JSON.stringify(messages));
+    }
+  }, [messages, pageId]);
 
   const getSystemPrompt = () => {
     return `You are an expert Next.js developer. When providing code, please follow these guidelines:
@@ -182,50 +205,67 @@ ${currentContent || '// No content yet'}
     }
   };
 
+  const clearHistory = () => {
+    setMessages([]);
+    localStorage.removeItem(`chat_history_${pageId}`);
+  };
+
   return (
-    <div className="flex flex-col h-full bg-gray-900">
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message) => (
-          <div key={message.id} className={`flex ${
-            message.role === 'user' ? 'justify-end' : 'justify-start'
-          }`}>
-            <div className={`max-w-[80%] rounded-lg p-4 ${
-              message.role === 'user' 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-800 text-white'
+    <div className="flex flex-col h-[calc(100vh-4rem)] bg-gray-900">
+      <div className="flex justify-end p-2 border-b border-gray-800">
+        <button
+          onClick={clearHistory}
+          className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+        >
+          Clear History
+        </button>
+      </div>
+      <div 
+        ref={chatContainerRef}
+        className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800"
+      >
+        <div className="p-4 space-y-4">
+          {messages.map((message) => (
+            <div key={message.id} className={`flex ${
+              message.role === 'user' ? 'justify-end' : 'justify-start'
             }`}>
-              <div className="prose prose-invert max-w-none">
-                {message.content}
-              </div>
-              {message.codeBlocks && message.codeBlocks.length > 0 && (
-                <div className="mt-4 space-y-4">
-                  {message.codeBlocks.map((block, index) => (
-                    <div key={index} className="border border-gray-700 rounded-lg overflow-hidden">
-                      <div className="bg-gray-700 px-4 py-2 flex justify-between items-center">
-                        <span className="text-sm font-mono">{block.filepath}</span>
-                        <button
-                          onClick={() => handleApplyChanges(block)}
-                          className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-                        >
-                          Apply Changes
-                        </button>
-                      </div>
-                      <pre className="p-4 bg-gray-900 overflow-x-auto">
-                        <code className="text-sm text-gray-300">
-                          {block.content}
-                        </code>
-                      </pre>
-                    </div>
-                  ))}
+              <div className={`max-w-[80%] rounded-lg p-4 ${
+                message.role === 'user' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-800 text-white'
+              }`}>
+                <div className="prose prose-invert max-w-none">
+                  {message.content}
                 </div>
-              )}
+                {message.codeBlocks && message.codeBlocks.length > 0 && (
+                  <div className="mt-4 space-y-4">
+                    {message.codeBlocks.map((block, index) => (
+                      <div key={index} className="border border-gray-700 rounded-lg overflow-hidden">
+                        <div className="bg-gray-700 px-4 py-2 flex justify-between items-center">
+                          <span className="text-sm font-mono">{block.filepath}</span>
+                          <button
+                            onClick={() => handleApplyChanges(block)}
+                            className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                          >
+                            Apply Changes
+                          </button>
+                        </div>
+                        <pre className="p-4 bg-gray-900 overflow-x-auto">
+                          <code className="text-sm text-gray-300">
+                            {block.content}
+                          </code>
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-        <div ref={messagesEndRef} />
+          ))}
+        </div>
       </div>
 
-      <form onSubmit={handleSendMessage} className="border-t border-gray-800 p-4">
+      <form onSubmit={handleSendMessage} className="border-t border-gray-800 p-4 bg-gray-900">
         <div className="flex space-x-4">
           <input
             type="text"
