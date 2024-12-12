@@ -11,9 +11,12 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
     "@babel/standalone": "^7.26.4",
+    "@codemirror/lang-javascript": "^6.2.2",
+    "@codemirror/view": "^6.35.3",
     "@headlessui/react": "^1.7.17",
     "@monaco-editor/react": "^4.6.0",
     "@types/next-auth": "^3.13.0",
+    "@uiw/react-codemirror": "^4.23.6",
     "archiver": "^7.0.1",
     "eventsource-parser": "^3.0.0",
     "framer-motion": "^11.13.5",

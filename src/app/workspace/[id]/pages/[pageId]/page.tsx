@@ -6,6 +6,7 @@ import { use } from 'react';
 import { projectStore } from '@/lib/store/projects';
 import { LivePreview } from '@/components/workspace/LivePreview';
 import { Toast } from '@/components/ui/Toast';
+import { CodeEditor } from '@/components/workspace/CodeEditor';
 import EnhancedAIChat from '@/components/EnhancedAIChat';
 import JSZip from 'jszip';
 import { generateProjectFiles } from '@/lib/utils/projectFiles';
@@ -111,72 +112,90 @@ export default function PageEditor({ params: paramsPromise }: { params: Promise<
   };
 
   return (
-    <div className="h-screen flex relative">
-      {/* Fixed Header */}
-      <div className="fixed top-0 left-0 right-0 z-10 bg-white border-b border-gray-200">
-        <div className="flex justify-between items-center px-6 py-4">
-          <h1 className="text-xl font-medium text-gray-900">Edit Page: {config.name}</h1>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleDownloadCode}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-            >
-              Download Code
-            </button>
-            <button
-              onClick={() => setShowCode(!showCode)}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-            >
-              {showCode ? 'Hide Code' : 'Show Code'}
-            </button>
-            <button
-              onClick={() => setShowPreview(!showPreview)}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-            >
-              {showPreview ? 'Hide Preview' : 'Show Preview'}
-            </button>
-            <button
-              onClick={() => handleContentChange(config.content)}
-              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-            >
-              Save Changes
-            </button>
-          </div>
+    <div className="h-screen flex bg-gray-900">
+      {/* Left Sidebar */}
+      <div className="w-64 border-r border-gray-700 bg-gray-800 flex flex-col shrink-0">
+        <div className="p-4 border-b border-gray-700">
+          <h1 className="text-lg font-medium text-white truncate">{config.name}</h1>
+          <p className="mt-1 text-sm text-gray-400">Page Editor</p>
         </div>
-      </div>
-
-      {/* Main Content Area - Adjusted for fixed header */}
-      <div className={`flex-1 flex flex-col mt-[73px] ${showPreview ? 'mr-[520px]' : ''}`}>
-        {/* Code Editor Section - Hidden by default */}
-        {showCode && (
-          <div className="border-b border-gray-200">
-            <textarea
-              value={config.content}
-              onChange={(e) => handleContentChange(e.target.value)}
-              className="w-full h-[300px] p-4 font-mono text-sm border-0 focus:ring-2 focus:ring-primary focus:border-primary"
-              placeholder="Enter your page content here..."
-            />
-          </div>
-        )}
         
-        {/* AI Chat Section */}
-        <div className="flex-1">
-          <EnhancedAIChat 
-            currentContent={config.content}
-            onUpdateContent={handleContentChange}
-            pageId={params.pageId}
-          />
+        <div className="p-4 space-y-3">
+          <button
+            onClick={handleDownloadCode}
+            className="w-full px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Download Code
+          </button>
+          
+          <button
+            onClick={() => setShowCode(!showCode)}
+            className="w-full px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+            </svg>
+            {showCode ? 'Hide Code' : 'Show Code'}
+          </button>
+          
+          <button
+            onClick={() => setShowPreview(!showPreview)}
+            className="w-full px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            {showPreview ? 'Hide Preview' : 'Show Preview'}
+          </button>
+          
+          <button
+            onClick={() => handleContentChange(config.content)}
+            className="w-full px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            Save Changes
+          </button>
         </div>
       </div>
 
-      {/* Preview Panel */}
-      {showPreview && (
-        <div className="fixed top-0 right-0 w-[500px] h-screen bg-white border-l border-gray-200 overflow-hidden">
-          <div className="h-full pt-[73px]">
-            <LivePreview content={config.content} />
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className={`flex-1 flex ${showPreview ? 'mr-[500px]' : ''}`}>
+          {/* Code Editor and Chat Section */}
+          <div className="flex-1 flex flex-col min-w-0">
+            {showCode && (
+              <div className="p-6 border-b border-gray-700">
+                <CodeEditor
+                  value={config.content}
+                  onChange={handleContentChange}
+                  language="typescript"
+                />
+              </div>
+            )}
+            
+            <div className="flex-1 p-6 overflow-auto">
+              <EnhancedAIChat 
+                currentContent={config.content}
+                onUpdateContent={handleContentChange}
+                pageId={params.pageId}
+              />
+            </div>
           </div>
+
+          {/* Preview Panel */}
+          {showPreview && (
+            <div className="fixed top-0 right-0 w-[500px] h-screen bg-gray-800 border-l border-gray-700 overflow-hidden">
+              <LivePreview content={config.content} />
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {showToast && (
         <Toast 
