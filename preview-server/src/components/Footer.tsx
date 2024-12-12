@@ -1,4 +1,6 @@
-"use client";
+
+            "use client";
+            "use client";
 
 import { useState } from 'react';
 export function Footer() {
@@ -13,3 +15,4 @@ export function Footer() {
     </div>
   );
 }
+          

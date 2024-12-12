@@ -1,4 +1,6 @@
-export function DoctorCard({ name, specialty }: { name: string; specialty: string }) {
+
+            "use client";
+            export function DoctorCard({ name, specialty }: { name: string; specialty: string }) {
   return (
     <div className="bg-white shadow-md rounded-lg p-6 text-center">
       <img src="/placeholder-doctor.jpg" alt={name} className="w-32 h-32 rounded-full mx-auto mb-4" />
@@ -7,3 +9,4 @@ export function DoctorCard({ name, specialty }: { name: string; specialty: strin
     </div>
   );
 }
+          

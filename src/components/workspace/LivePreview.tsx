@@ -4,6 +4,17 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { projectStore } from '@/lib/store/projects';
 
+interface DeploymentResult {
+  success: boolean;
+  error?: string;
+  results?: Array<{
+    path: string;
+    success: boolean;
+    size?: number;
+    error?: string;
+  }>;
+}
+
 export function LivePreview() {
   const params = useParams();
   const projectId = params.id as string;
@@ -17,15 +28,19 @@ export function LivePreview() {
       const pages = projectStore.getProjectPages(projectId);
       const components = projectStore.getProjectComponents(projectId);
 
-      console.log('Components to deploy:', components);
-
       const files: Record<string, string> = {};
 
       // Add pages with proper Next.js structure
       pages?.forEach(page => {
         if (page.path && page.content) {
           const normalizedPath = page.path.replace(/^\//, '').replace(/\.tsx$/, '');
-          files[`app/${normalizedPath}/page.tsx`] = page.content;
+          // Skip layout and header files
+          if (normalizedPath !== 'layout' && normalizedPath !== 'header') {
+            files[`app/${normalizedPath}/page.tsx`] = `
+              "use client";
+              ${page.content}
+            `;
+          }
         }
       });
 
@@ -34,33 +49,18 @@ export function LivePreview() {
         const componentContent = component.content || component.code;
         if (componentContent) {
           const componentName = component.name.replace(/\.tsx$/, '');
-          const componentPath = `components/${componentName}.tsx`;
-          console.log('Adding component:', { componentName, componentPath, hasContent: !!componentContent });
-          files[componentPath] = componentContent;
+          // Skip Header component
+          if (componentName !== 'Header') {
+            const componentPath = `components/${componentName}.tsx`;
+            files[componentPath] = `
+              "use client";
+              ${componentContent}
+            `;
+          }
         }
       });
 
-      // Add layout.tsx with Tailwind CSS
-      files['app/layout.tsx'] = `
-        export default function RootLayout({
-          children,
-        }: {
-          children: React.ReactNode
-        }) {
-          return (
-            <html lang="en">
-              <head>
-                <meta charSet="utf-8" />
-                <meta name="viewport" content="width=device-width, initial-scale=1" />
-                <script src="https://cdn.tailwindcss.com"></script>
-              </head>
-              <body>{children}</body>
-            </html>
-          )
-        }
-      `;
-
-      console.log('Starting deployment...');
+      console.log('Starting deployment with files:', files);
       const response = await fetch('http://localhost:3001/api/deploy', {
         method: 'POST',
         headers: {
@@ -69,14 +69,13 @@ export function LivePreview() {
         body: JSON.stringify({ files }),
       });
 
-      const result = await response.json();
-      console.log('Deployment result:', result);
-
+      const result: DeploymentResult = await response.json();
+      
       if (!result.success) {
         throw new Error(result.error || 'Deployment failed');
       }
 
-      // Log successful files
+      // Log deployment results
       result.results?.forEach(file => {
         if (file.success) {
           console.log(`✓ ${file.path} (${file.size} bytes)`);

@@ -1,4 +1,6 @@
-import React from 'react';
+
+            "use client";
+            import React from 'react';
 import { Header } from '../components/Header';
 import { HeroSection } from '../components/HeroSection';
 import { ServiceCard } from '../components/ServiceCard';
@@ -47,3 +49,4 @@ export default function HomePage() {
     </div>
   );
 }
+          

@@ -1,15 +1,24 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { projectStore } from '@/lib/store/projectStore';
 
 export function middleware(request: NextRequest) {
-  const response = NextResponse.next();
+  const pathname = request.nextUrl.pathname;
+  
+  // Skip API routes and static files
+  if (pathname.startsWith('/api') || pathname.includes('.')) {
+    return NextResponse.next();
+  }
 
-  // Add CORS headers
-  response.headers.set('Access-Control-Allow-Origin', 'http://localhost:3000');
-  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+  // Check if the page exists in the project store
+  const pages = projectStore.getAllPages();
+  const pageExists = pages.some(page => page.path === pathname);
 
-  return response;
+  if (!pageExists) {
+    return NextResponse.redirect(new URL('/404', request.url));
+  }
+
+  return NextResponse.next();
 }
 
 // Configure which paths should handle CORS
