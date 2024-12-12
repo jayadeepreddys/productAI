@@ -3,6 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs').promises;
 const path = require('path');
+const { cleanupPreviewFiles } = require('../lib/utils/cleanupPreview');
+import { ensureModules } from '../src/lib/utils/ensureModules';
 
 const dev = process.env.NODE_ENV !== 'production';
 const app = next({ dev });
@@ -54,8 +56,16 @@ app.prepare().then(() => {
   server.post('/api/deploy', async (req, res) => {
     console.log('Deploy request received');
     try {
-      const { files } = req.body;
+      // Ensure modules are up to date
+      await ensureModules(process.cwd());
+
+      const { files, projectId } = req.body;
       const baseDir = path.join(process.cwd(), 'src');
+
+      // Clean up existing files first
+      await cleanupPreviewFiles(baseDir);
+
+      // Rest of the deployment code
       const results = [];
 
       console.log('Files to deploy:', Object.keys(files));

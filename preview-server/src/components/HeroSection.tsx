@@ -1,6 +1,6 @@
 
-            "use client";
-            "use client";
+              "use client";
+              "use client";
 
 import { useState } from 'react';
 export function HeroSection() {
@@ -15,4 +15,4 @@ export function HeroSection() {
     </div>
   );
 }
-          
+            

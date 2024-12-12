@@ -1,6 +1,7 @@
 import { ProjectData } from '@/types/project';
 import { samplePages } from './templates';
 import { sampleTemplates } from './templates';
+import { baseStylesTemplate } from '../templates/baseStyles';
 
 interface ComponentData {
   id: string;
@@ -212,6 +213,24 @@ class ProjectStore {
     const projects = this.getProjects();
     const updatedProjects = projects.filter(project => project.id !== projectId);
     localStorage.setItem('projects', JSON.stringify(updatedProjects));
+  }
+
+  createProject(name: string): string {
+    const id = generateId();
+    this.projects.set(id, {
+      id,
+      name,
+      pages: new Map(),
+      components: new Map(),
+      styles: baseStylesTemplate, // Add base styles on project creation
+      // ... other project properties
+    });
+    return id;
+  }
+
+  getProjectStyles(projectId: string): string | undefined {
+    const project = this.projects.get(projectId);
+    return project?.styles;
   }
 }
 

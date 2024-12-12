@@ -66,7 +66,10 @@ export function LivePreview() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ files }),
+        body: JSON.stringify({ 
+          files,
+          projectId 
+        }),
       });
 
       const result: DeploymentResult = await response.json();

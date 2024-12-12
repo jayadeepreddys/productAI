@@ -1,52 +1,47 @@
 
-            "use client";
-            import React from 'react';
-import { Header } from '../components/Header';
-import { HeroSection } from '../components/HeroSection';
-import { ServiceCard } from '../components/ServiceCard';
-import { DoctorCard } from '../components/DoctorCard';
-import { Footer } from '../components/Footer';
+              "use client";
+              "use client";
 
-/**
- * HomePage component represents the main content of the hospital's home page.
- */
+import React from 'react';
+import Link from 'next/link';
+
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <header className="bg-white shadow">
+        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+          <h1 className="text-3xl font-bold text-gray-900">Welcome</h1>
+        </div>
+      </header>
       <main>
-        <HeroSection />
-        <section className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-gray-800 mb-8">Our Services</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <ServiceCard
-              title="Emergency Care"
-              description="24/7 emergency medical services for critical situations."
-            />
-            <ServiceCard
-              title="Cardiology"
-              description="Comprehensive care for heart and vascular conditions."
-            />
-            <ServiceCard
-              title="Orthopedics"
-              description="Treatment for musculoskeletal injuries and disorders."
-            />
-          </div>
-        </section>
-        <section className="bg-gray-100 py-12">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 className="text-3xl font-bold text-gray-800 mb-8">Our Doctors</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-              <DoctorCard name="Dr. John Doe" specialty="Cardiology" />
-              <DoctorCard name="Dr. Jane Smith" specialty="Orthopedics" />
-              <DoctorCard name="Dr. Michael Johnson" specialty="Neurology" />
-              <DoctorCard name="Dr. Emily Davis" specialty="Pediatrics" />
+        <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+          <div className="px-4 py-6 sm:px-0">
+            <div className="border-4 border-dashed border-gray-200 rounded-lg p-6">
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">Getting Started</h2>
+              <p className="text-gray-600 mb-4">
+                This is your new project homepage. Start by customizing this page or creating new components.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Link 
+                  href="/about" 
+                  className="block p-6 bg-white shadow rounded-lg hover:shadow-md transition-shadow"
+                >
+                  <h3 className="text-lg font-medium text-gray-900">About</h3>
+                  <p className="mt-2 text-gray-600">Learn more about our project</p>
+                </Link>
+                <Link 
+                  href="/contact" 
+                  className="block p-6 bg-white shadow rounded-lg hover:shadow-md transition-shadow"
+                >
+                  <h3 className="text-lg font-medium text-gray-900">Contact</h3>
+                  <p className="mt-2 text-gray-600">Get in touch with our team</p>
+                </Link>
+              </div>
             </div>
           </div>
-        </section>
+        </div>
       </main>
-      <Footer />
     </div>
   );
 }
-          
+            
