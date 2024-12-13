@@ -27,17 +27,16 @@ export async function POST(request: Request) {
     const projectData = await request.json();
     const { id, name, pages, components } = projectData;
 
-    // Create directories
-    const previewDir = path.join(process.cwd(), 'src/app');
+    // Create components directory
     const componentsDir = path.join(process.cwd(), 'src/components');
-
-    await fs.mkdir(previewDir, { recursive: true });
     await fs.mkdir(componentsDir, { recursive: true });
 
     // Write pages
     for (const page of pages) {
       if (page.path && page.content) {
-        const pagePath = path.join(previewDir, `${page.path}/page.tsx`);
+        // Remove leading slash if present
+        const cleanPath = page.path.startsWith('/') ? page.path.slice(1) : page.path;
+        const pagePath = path.join(process.cwd(), 'src/app', cleanPath === '' ? 'page.tsx' : `${cleanPath}/page.tsx`);
         await fs.mkdir(path.dirname(pagePath), { recursive: true });
         await fs.writeFile(pagePath, `"use client";\n\n${page.content}`);
       }

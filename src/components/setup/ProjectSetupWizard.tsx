@@ -8,6 +8,7 @@ import { TechStackSelection } from './steps/TechStackSelection';
 import { GitConfiguration } from './steps/GitConfiguration';
 import { ProjectSummary } from './steps/ProjectSummary';
 import { projectStore } from '@/lib/store/projects';
+import { toast } from 'react-hot-toast';
 
 type SetupStep = 'basic-info' | 'tech-stack' | 'git-config' | 'summary';
 
@@ -101,6 +102,36 @@ export default function ProjectSetupWizard() {
     } catch (err) {
       console.error('Project creation error:', err);
       setError(err instanceof Error ? err.message : 'Failed to create project');
+    }
+  };
+
+  const handleDeleteProject = async (projectId) => {
+    try {
+      // Show confirmation dialog
+      const confirmed = window.confirm("Are you sure you want to delete this project?");
+      
+      if (!confirmed) return;
+
+      // Make API call to delete the project
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete project');
+      }
+
+      // Update the UI by removing the deleted project
+      setProjects(projects.filter(project => project.id !== projectId));
+      
+      // Show success message
+      toast.success('Project deleted successfully');
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      toast.error('Failed to delete project');
     }
   };
 

@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { generateText } from '@/lib/services/aiService';
+import { projectStore } from '@/lib/store/projects';
+import { useParams } from 'next/navigation';
 
 interface CodeBlock {
   type: 'component' | 'page' | 'style' | 'config';
@@ -23,6 +25,8 @@ interface FileOperation {
   content: string;
   filepath: string;
   type: 'component' | 'page' | 'style' | 'config';
+  projectId?: string;
+  action?: 'create' | 'update';
 }
 
 interface EnhancedAIChatProps {
@@ -31,6 +35,7 @@ interface EnhancedAIChatProps {
   onCreateFile?: (operation: FileOperation) => Promise<void>;
   pageId: string;
   contextType?: 'component' | 'page';
+  isFileExists?: (filepath: string) => boolean;
 }
 
 interface StreamBlock {
@@ -45,8 +50,17 @@ export default function EnhancedAIChat({
   onUpdateContent, 
   onCreateFile,
   pageId,
-  contextType = 'page'
+  contextType = 'page',
+  isFileExists
 }: EnhancedAIChatProps) {
+  const params = useParams();
+  
+  // Use the 'id' parameter instead of 'workspaceId'
+  const projectId = params.id as string;
+  
+  console.log('URL Params:', params);
+  console.log('Current Project ID:', projectId);
+
   const [messages, setMessages] = useState<Message[]>(() => {
     if (typeof window === 'undefined') return [];
     const saved = localStorage.getItem(`chat_history_${pageId}`);
@@ -181,21 +195,138 @@ ${currentContent || '// No content yet'}
 
   const handleApplyChanges = async (filepath: string, code: string, type: string) => {
     try {
-      const fileOperation: FileOperation = {
-        content: code,
-        filepath,
-        type: type as FileOperation['type']
-      };
+      console.log('=== Starting Save Operation ===');
+      console.log('Project ID:', projectId);
+      console.log('Original Type:', type);
+      console.log('File Path:', filepath);
 
-      if (onCreateFile) {
-        // Use the new file creation handler if provided
-        await onCreateFile(fileOperation);
+      // Determine the correct type based on filepath
+      let fileType = type;
+      if (filepath.includes('page.tsx')) {
+        fileType = 'page';
+      } else if (filepath.endsWith('.tsx')) {
+        fileType = 'component';
+      }
+
+      console.log('Resolved File Type:', fileType);
+
+      if (!projectId) {
+        console.error('No project ID found in URL');
+        return;
+      }
+
+      const project = projectStore.getProjectById(projectId);
+      
+      if (!project) {
+        console.error(`Project with ID ${projectId} not found`);
+        return;
+      }
+
+      console.log('Found Project:', project.name);
+
+      if (fileType === 'component') {
+        const componentName = filepath.split('/').pop()?.replace('.tsx', '') || '';
+        
+        // Check if component already exists
+        const existingComponents = projectStore.getProjectComponents(projectId);
+        const existingComponent = existingComponents.find(c => c.name === componentName);
+        
+        if (existingComponent) {
+          // Update existing component
+          projectStore.updateComponent(projectId, existingComponent.id, {
+            code: code,
+          });
+          console.log(`Updated existing component: ${componentName}`);
+        } else {
+          // Create new component
+          const newComponent = projectStore.addComponent(projectId, {
+            name: componentName,
+            type: 'ui',
+            code: code,
+            preview: '',
+          });
+          console.log('Created new component:', newComponent);
+        }
+      } 
+      else if (fileType === 'page') {
+        // Extract function name from the code for the page name
+        const functionMatch = code.match(/export\s+default\s+function\s+(\w+)/);
+        let pageName = functionMatch ? functionMatch[1].replace('Page', '') : '';
+        
+        // If no function name found, use filepath
+        if (!pageName) {
+          pageName = filepath.split('/').pop()?.replace('page.tsx', '') || 'index';
+        }
+        
+        // Clean up the name
+        pageName = pageName
+          .replace(/([A-Z])/g, ' $1') // Add spaces before capitals
+          .trim() // Remove extra spaces
+          .replace(/^\w/, c => c.toUpperCase()); // Capitalize first letter
+        
+        // Generate path from name
+        const pagePath = pageName.toLowerCase() === 'home' 
+          ? '/' 
+          : `/${pageName.toLowerCase().replace(/\s+/g, '-')}`;
+
+        console.log('Page Details:', {
+          name: pageName,
+          path: pagePath,
+          projectId: projectId
+        });
+
+        // Check if page already exists
+        const existingPages = projectStore.getProjectPages(projectId);
+        const existingPage = existingPages.find(p => p.path === pagePath);
+
+        if (existingPage) {
+          // Update existing page
+          projectStore.updatePage(projectId, existingPage.id, {
+            content: code,
+          });
+          console.log(`Updated existing page: ${pageName} at ${pagePath}`);
+        } else {
+          // Create new page
+          const newPage = projectStore.addPage(projectId, {
+            name: pageName,
+            path: pagePath,
+            description: `Auto-generated page: ${pageName}`,
+            components: [],
+            apis: [],
+            content: code,
+          });
+          console.log('Created new page:', newPage);
+        }
       } else {
-        // Fallback to updating current content (for backward compatibility)
-        await onUpdateContent(code);
+        console.warn('Unhandled file type:', fileType);
+      }
+
+      console.log('=== Save Operation Complete ===');
+
+    } catch (error) {
+      console.error('=== Save Operation Failed ===');
+      console.error('Error details:', error);
+      console.error('Failed operation type:', type);
+      console.error('Failed filepath:', filepath);
+      throw new Error(`Failed to save ${type}: ${error}`);
+    }
+  };
+
+  const handleBatchChanges = async () => {
+    try {
+      const files = message.content.split('[Artifact:').slice(1).map(part => {
+        const filepath = part.slice(0, part.indexOf(']'));
+        const codeContent = part.slice(part.indexOf('```') + 3);
+        const code = codeContent.slice(0, codeContent.indexOf('```')).trim();
+        const { type } = getFileTypeStyles(filepath);
+        return { filepath, code, type };
+      });
+
+      for (const file of files) {
+        await handleApplyChanges(file.filepath, file.code, file.type);
       }
     } catch (error) {
-      console.error('Failed to apply changes:', error);
+      console.error('Failed to process files:', error);
     }
   };
 
@@ -284,6 +415,24 @@ ${currentContent || '// No content yet'}
     return { type: 'other', color: 'bg-gray-600', icon: '📁' };
   };
 
+  const getActionButtonText = (filepath: string, type: string): string => {
+    const exists = isFileExists?.(filepath) ?? false;
+    if (exists) {
+      return 'Update File';
+    }
+    
+    switch (type) {
+      case 'component':
+        return 'Create Component';
+      case 'page':
+        return 'Create Page';
+      case 'style':
+        return 'Add Styles';
+      default:
+        return 'Create File';
+    }
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] bg-gray-900 overflow-hidden">
       <div className="flex justify-end p-2 border-b border-gray-800">
@@ -364,9 +513,7 @@ ${currentContent || '// No content yet'}
                                     onClick={() => handleApplyChanges(filepath, code, type)}
                                     className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-md"
                                   >
-                                    {type === 'component' ? 'Create Component' :
-                                     type === 'page' ? 'Create Page' :
-                                     type === 'style' ? 'Add Styles' : 'Create File'}
+                                    {getActionButtonText(filepath, type)}
                                   </button>
                                   <button
                                     onClick={() => navigator.clipboard.writeText(code)}
@@ -388,22 +535,13 @@ ${currentContent || '// No content yet'}
                     {/* Batch Actions */}
                     <div className="border-t border-gray-700 pt-4 flex space-x-3">
                       <button
-                        onClick={async () => {
-                          const files = message.content.split('[Artifact:').slice(1).map(part => {
-                            const filepath = part.slice(0, part.indexOf(']'));
-                            const codeContent = part.slice(part.indexOf('```') + 3);
-                            const code = codeContent.slice(0, codeContent.indexOf('```')).trim();
-                            const { type } = getFileTypeStyles(filepath);
-                            return { filepath, code, type };
-                          });
-
-                          for (const file of files) {
-                            await handleApplyChanges(file.filepath, file.code, file.type);
-                          }
-                        }}
+                        onClick={handleBatchChanges}
                         className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-md"
                       >
-                        Create All Files
+                        {message.content.split('[Artifact:').slice(1).some(part => {
+                          const filepath = part.slice(0, part.indexOf(']'));
+                          return isFileExists?.(filepath) ?? false;
+                        }) ? 'Update/Create Files' : 'Create All Files'}
                       </button>
                       <button
                         onClick={() => {
