@@ -248,6 +248,23 @@ ${currentContent || '// No content yet'}
       .trim();
   };
 
+  // Add this helper function at component level
+  const getFileTypeStyles = (filepath: string) => {
+    if (filepath.includes('/components/')) {
+      return { type: 'component', color: 'bg-blue-600', icon: '⚛️' };
+    }
+    if (filepath.includes('/app/') || filepath.includes('/pages/')) {
+      return { type: 'page', color: 'bg-green-600', icon: '📄' };
+    }
+    if (filepath.includes('.css') || filepath.includes('.module.css')) {
+      return { type: 'style', color: 'bg-purple-600', icon: '🎨' };
+    }
+    if (filepath.includes('types.ts') || filepath.includes('.d.ts')) {
+      return { type: 'types', color: 'bg-yellow-600', icon: 'TS' };
+    }
+    return { type: 'other', color: 'bg-gray-600', icon: '📁' };
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] bg-gray-900 overflow-hidden">
       <div className="flex justify-end p-2 border-b border-gray-800">
@@ -273,58 +290,113 @@ ${currentContent || '// No content yet'}
                   ? 'bg-blue-600 text-white' 
                   : 'bg-gray-800 text-white'
               }`}>
-                <div className="prose prose-invert max-w-none whitespace-pre-wrap">
+                {/* Regular text content */}
+                <div className="prose prose-invert max-w-none">
                   {message.content.split('[Artifact:').map((part, index) => {
                     if (index === 0) return part;
-                    // Skip artifact references in the text as we'll show them separately
                     const endIndex = part.indexOf(']');
                     return part.slice(endIndex + 1);
                   })}
                 </div>
-                
-                {/* Code Artifacts */}
-                {message.role === 'assistant' && message.codeBlocks && message.codeBlocks.length > 0 && (
-                  <div className="mt-4 space-y-4">
-                    {message.codeBlocks.map((block, index) => (
-                      <div key={index} className="border border-gray-700 rounded-lg overflow-hidden">
-                        <div className="bg-gray-700 px-4 py-2 flex justify-between items-center">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-sm font-mono">{block.filepath}</span>
-                            <span className={`text-xs px-2 py-1 rounded ${
-                              block.type === 'component' ? 'bg-blue-600' :
-                              block.type === 'page' ? 'bg-green-600' :
-                              block.type === 'style' ? 'bg-purple-600' : 'bg-gray-600'
-                            }`}>
-                              {block.type}
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => handleApplyChanges(block)}
-                            className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-                          >
-                            Apply Changes
-                          </button>
-                        </div>
-                        <pre className="p-4 bg-gray-900 overflow-x-auto">
-                          <code className="text-sm text-gray-300">
-                            {block.content}
-                          </code>
-                        </pre>
-                      </div>
-                    ))}
-                  </div>
-                )}
 
-                {/* Assistant message controls */}
+                {/* Artifacts Section */}
                 {message.role === 'assistant' && (
-                  <div className="mt-4 flex space-x-2">
-                    <button
-                      onClick={() => regenerateResponse(message.id)}
-                      className="px-3 py-1 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700"
-                      disabled={isLoading}
-                    >
-                      {isLoading ? 'Regenerating...' : 'Regenerate'}
-                    </button>
+                  <div className="mt-6 space-y-6">
+                    {/* File Overview */}
+                    <div className="bg-gray-700/50 rounded-lg p-4">
+                      <h3 className="text-sm font-medium mb-3">Generated Files:</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {message.content.split('[Artifact:').slice(1).map((part, index) => {
+                          const filepath = part.slice(0, part.indexOf(']'));
+                          const { type, color, icon } = getFileTypeStyles(filepath);
+                          return (
+                            <div key={index} className="flex items-center space-x-2 text-sm">
+                              <span className={`w-6 h-6 ${color} rounded flex items-center justify-center text-xs`}>
+                                {icon}
+                              </span>
+                              <span className="truncate">{filepath}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Code Blocks */}
+                    <div className="space-y-4">
+                      {message.content.split('[Artifact:').slice(1).map((part, index) => {
+                        const filepath = part.slice(0, part.indexOf(']'));
+                        const codeContent = part.slice(part.indexOf('```') + 3);
+                        const endCode = codeContent.indexOf('```');
+                        const code = codeContent.slice(0, endCode).trim();
+                        const { type, color, icon } = getFileTypeStyles(filepath);
+
+                        return (
+                          <div key={index} className="border border-gray-700 rounded-lg overflow-hidden">
+                            <div className="bg-gray-700 px-4 py-2">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-3">
+                                  <span className={`w-6 h-6 ${color} rounded flex items-center justify-center text-xs`}>
+                                    {icon}
+                                  </span>
+                                  <span className="text-sm font-mono">{filepath}</span>
+                                </div>
+                                <div className="flex space-x-2">
+                                  <button
+                                    onClick={() => onUpdateContent(code)}
+                                    className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-md"
+                                  >
+                                    {type === 'component' ? 'Create Component' :
+                                     type === 'page' ? 'Create Page' :
+                                     type === 'style' ? 'Add Styles' : 'Create File'}
+                                  </button>
+                                  <button
+                                    onClick={() => navigator.clipboard.writeText(code)}
+                                    className="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded-md"
+                                  >
+                                    Copy
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                            <pre className="p-4 bg-gray-900 overflow-x-auto">
+                              <code className="text-sm text-gray-300">{code}</code>
+                            </pre>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Batch Actions */}
+                    <div className="border-t border-gray-700 pt-4 flex space-x-3">
+                      <button
+                        onClick={() => {
+                          const allCode = message.content.split('[Artifact:').slice(1)
+                            .map(part => {
+                              const codeContent = part.slice(part.indexOf('```') + 3);
+                              return codeContent.slice(0, codeContent.indexOf('```')).trim();
+                            })
+                            .join('\n\n');
+                          onUpdateContent(allCode);
+                        }}
+                        className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-md"
+                      >
+                        Create All Files
+                      </button>
+                      <button
+                        onClick={() => {
+                          const allCode = message.content.split('[Artifact:').slice(1)
+                            .map(part => {
+                              const codeContent = part.slice(part.indexOf('```') + 3);
+                              return codeContent.slice(0, codeContent.indexOf('```')).trim();
+                            })
+                            .join('\n\n');
+                          navigator.clipboard.writeText(allCode);
+                        }}
+                        className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded-md"
+                      >
+                        Copy All Code
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
