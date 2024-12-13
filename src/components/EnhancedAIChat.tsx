@@ -4,9 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import { generateText } from '@/lib/services/aiService';
 
 interface CodeBlock {
+  type: 'component' | 'page' | 'style' | 'config';
   filepath: string;
   content: string;
-  type: 'component' | 'page' | 'style' | 'config';
   action: 'create' | 'update';
 }
 
@@ -16,6 +16,7 @@ interface Message {
   content: string;
   timestamp: Date;
   codeBlocks?: CodeBlock[];
+  isCodeBlocksExtracted?: boolean;
 }
 
 interface EnhancedAIChatProps {
@@ -23,6 +24,13 @@ interface EnhancedAIChatProps {
   onUpdateContent: (content: string) => void;
   pageId: string;
   contextType?: 'component' | 'page';
+}
+
+interface StreamBlock {
+  type: 'code' | 'text';
+  language: string;
+  filepath: string;
+  content: string;
 }
 
 export default function EnhancedAIChat({ 
@@ -108,11 +116,8 @@ ${currentContent || '// No content yet'}
     setIsLoading(true);
 
     try {
-      const systemPrompt = getSystemPrompt();
-      const fullPrompt = `${systemPrompt}\n\nUser request: ${userMessage.content}\n\nProvide your response with code blocks using the specified format.`;
+      const response = await generateText(inputValue, contextType);
       
-      const response = await generateText(fullPrompt, contextType, true);
-      let fullResponse = '';
       let currentAssistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -121,75 +126,42 @@ ${currentContent || '// No content yet'}
         codeBlocks: []
       };
 
-      for await (const chunk of response) {
-        fullResponse += chunk.data;
-        
-        // Update message content
+      for await (const block of response) {
+        if (block.type === 'code') {
+          // Handle code artifacts
+          const codeBlock: CodeBlock = {
+            filepath: block.filepath,
+            content: block.content,
+            type: getFileType(block.filepath),
+            action: 'create'
+          };
+          
+          currentAssistantMessage.codeBlocks = [
+            ...(currentAssistantMessage.codeBlocks || []),
+            codeBlock
+          ];
+        } else {
+          // Handle text content
+          currentAssistantMessage.content += block.content;
+        }
+
+        // Update message in real-time
         setMessages(prev => {
           const messages = [...prev];
           const lastMessage = messages[messages.length - 1];
           if (lastMessage.role === 'assistant') {
-            messages[messages.length - 1] = {
-              ...lastMessage,
-              content: fullResponse
-            };
+            messages[messages.length - 1] = currentAssistantMessage;
           } else {
-            messages.push({
-              ...currentAssistantMessage,
-              content: fullResponse
-            });
+            messages.push(currentAssistantMessage);
           }
           return messages;
         });
       }
-
-      // Process code blocks after full response
-      const codeBlocks = parseCodeBlocks(fullResponse);
-      
-      // Update final message with code blocks
-      setMessages(prev => {
-        const messages = [...prev];
-        const lastMessage = messages[messages.length - 1];
-        if (lastMessage.role === 'assistant') {
-          messages[messages.length - 1] = {
-            ...lastMessage,
-            codeBlocks
-          };
-        }
-        return messages;
-      });
-
     } catch (error) {
       console.error('Chat error:', error);
-      setMessages(prev => [...prev, {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: error instanceof Error ? error.message : 'An error occurred',
-        timestamp: new Date()
-      }]);
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const parseCodeBlocks = (text: string): CodeBlock[] => {
-    const blocks: CodeBlock[] = [];
-    const regex = /```(?:typescript|tsx|ts):([^\n]+)\n([\s\S]*?)```/g;
-    let match;
-
-    while ((match = regex.exec(text)) !== null) {
-      const [_, filepath, content] = match;
-      if (filepath && content) {
-        blocks.push({
-          filepath: filepath.trim(),
-          content: content.trim(),
-          type: getFileType(filepath),
-          action: 'create' // You might want to determine this based on file existence
-        });
-      }
-    }
-
-    return blocks;
   };
 
   const getFileType = (filepath: string): CodeBlock['type'] => {
@@ -199,9 +171,12 @@ ${currentContent || '// No content yet'}
     return 'config';
   };
 
-  const handleApplyChanges = (codeBlock: CodeBlock) => {
-    if (onUpdateContent) {
-      onUpdateContent(codeBlock.content);
+  const handleApplyChanges = async (block: CodeBlock) => {
+    try {
+      await onUpdateContent(block.content);
+      // Show success toast or feedback
+    } catch (error) {
+      console.error('Failed to apply changes:', error);
     }
   };
 
@@ -210,8 +185,71 @@ ${currentContent || '// No content yet'}
     localStorage.removeItem(`chat_history_${pageId}`);
   };
 
+  const regenerateResponse = async (messageId: string) => {
+    const messageIndex = messages.findIndex(m => m.id === messageId);
+    if (messageIndex === -1) return;
+
+    const prevUserMessage = messages.slice(0, messageIndex).reverse()
+      .find(m => m.role === 'user');
+    
+    if (!prevUserMessage) return;
+
+    setIsLoading(true);
+    
+    try {
+      const response = await generateText(prevUserMessage.content, contextType);
+      
+      let currentAssistantMessage: Message = {
+        ...messages[messageIndex],
+        content: '',
+        codeBlocks: []
+      };
+
+      for await (const block of response) {
+        if (block.type === 'code') {
+          const codeBlock: CodeBlock = {
+            filepath: block.filepath,
+            content: block.content,
+            type: getFileType(block.filepath),
+            action: 'create'
+          };
+          
+          currentAssistantMessage.codeBlocks = [
+            ...(currentAssistantMessage.codeBlocks || []),
+            codeBlock
+          ];
+        } else {
+          currentAssistantMessage.content += block.content;
+        }
+
+        // Update message in real-time
+        setMessages(prev => {
+          const messages = [...prev];
+          messages[messageIndex] = currentAssistantMessage;
+          return messages;
+        });
+      }
+    } catch (error) {
+      console.error('Regeneration error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Helper function to clean code content
+  const cleanCodeContent = (content: string): string => {
+    return content
+      .replace(/([a-zA-Z]+)=/g, '$1=') // Fix attribute spacing
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .replace(/([^>])\n/g, '$1 ') // Remove newlines not after closing tags
+      .split('\n')
+      .map(line => line.trim())
+      .join('\n')
+      .trim();
+  };
+
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] bg-gray-900">
+    <div className="flex flex-col h-[calc(100vh-4rem)] bg-gray-900 overflow-hidden">
       <div className="flex justify-end p-2 border-b border-gray-800">
         <button
           onClick={clearHistory}
@@ -220,6 +258,7 @@ ${currentContent || '// No content yet'}
           Clear History
         </button>
       </div>
+      
       <div 
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800"
@@ -234,15 +273,31 @@ ${currentContent || '// No content yet'}
                   ? 'bg-blue-600 text-white' 
                   : 'bg-gray-800 text-white'
               }`}>
-                <div className="prose prose-invert max-w-none">
-                  {message.content}
+                <div className="prose prose-invert max-w-none whitespace-pre-wrap">
+                  {message.content.split('[Artifact:').map((part, index) => {
+                    if (index === 0) return part;
+                    // Skip artifact references in the text as we'll show them separately
+                    const endIndex = part.indexOf(']');
+                    return part.slice(endIndex + 1);
+                  })}
                 </div>
-                {message.codeBlocks && message.codeBlocks.length > 0 && (
+                
+                {/* Code Artifacts */}
+                {message.role === 'assistant' && message.codeBlocks && message.codeBlocks.length > 0 && (
                   <div className="mt-4 space-y-4">
                     {message.codeBlocks.map((block, index) => (
                       <div key={index} className="border border-gray-700 rounded-lg overflow-hidden">
                         <div className="bg-gray-700 px-4 py-2 flex justify-between items-center">
-                          <span className="text-sm font-mono">{block.filepath}</span>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm font-mono">{block.filepath}</span>
+                            <span className={`text-xs px-2 py-1 rounded ${
+                              block.type === 'component' ? 'bg-blue-600' :
+                              block.type === 'page' ? 'bg-green-600' :
+                              block.type === 'style' ? 'bg-purple-600' : 'bg-gray-600'
+                            }`}>
+                              {block.type}
+                            </span>
+                          </div>
                           <button
                             onClick={() => handleApplyChanges(block)}
                             className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
@@ -257,6 +312,19 @@ ${currentContent || '// No content yet'}
                         </pre>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Assistant message controls */}
+                {message.role === 'assistant' && (
+                  <div className="mt-4 flex space-x-2">
+                    <button
+                      onClick={() => regenerateResponse(message.id)}
+                      className="px-3 py-1 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? 'Regenerating...' : 'Regenerate'}
+                    </button>
                   </div>
                 )}
               </div>

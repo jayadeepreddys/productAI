@@ -1,49 +1,47 @@
-import { parseCodeBlocks, cleanCodeContent, formatCode } from './codeBlockParser';
+import { ClaudeMessage, StreamedResponse, StreamedArtifact } from '@/types/claude';
 
-export async function generateText(prompt: string, type: 'page' | 'component', stream = false) {
+interface AIMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+export async function generateText(prompt: string, type: 'page' | 'component') {
   try {
-    const systemPrompt = `You are an expert Next.js developer. IMPORTANT: Format your response exactly as shown below:
+    const systemPrompt = {
+      role: 'system',
+      content: `You are an expert Next.js developer. When writing code:
+- Create separate code artifacts for each file
+- Include complete implementations with all imports
+- Use TypeScript with proper types
+- Follow Next.js 14 best practices
+- Include JSDoc comments for components
+- Keep explanations brief and focused
 
-First file:
+Example response format:
+Here's the component implementation:
+[Artifact: TodoList.tsx]
 
-\`\`\`typescript:src/app/page.tsx
-// Code for page.tsx here
-\`\`\`
+And here's the types file:
+[Artifact: types.ts]
 
-Second file:
+For styling:
+[Artifact: styles.css]`
+    };
 
-\`\`\`typescript:src/components/TodoList.tsx
-// Code for TodoList.tsx here
-\`\`\`
-
-Requirements:
-1. Each file MUST start with \`\`\`typescript:filepath
-2. Each file MUST end with \`\`\`
-3. Add a brief explanation between files
-4. Use complete, properly formatted TypeScript code
-5. Include proper imports and exports
-6. Follow Next.js 14 conventions
-
-Your task: ${prompt}`;
+    const messages: AIMessage[] = [
+      systemPrompt,
+      {
+        role: 'user',
+        content: `Context type: ${type}\n\n${prompt}`
+      }
+    ];
 
     const response = await fetch('/api/ai', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a Next.js expert. Always format code in clear, separate blocks.'
-          },
-          {
-            role: 'user',
-            content: systemPrompt
-          }
-        ],
-        stream: true
-      }),
+      body: JSON.stringify({ messages }),
     });
 
     if (!response.ok) {
@@ -52,67 +50,72 @@ Your task: ${prompt}`;
 
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
+    let buffer = '';
 
     return {
       async *[Symbol.asyncIterator]() {
-        try {
-          let buffer = '';
-          
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-            const chunk = decoder.decode(value, { stream: true });
-            buffer += chunk;
+          const chunk = decoder.decode(value);
+          buffer += chunk;
 
-            // Process complete messages
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
 
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const text = line.slice(6).trim();
-                if (!text || text === '[DONE]') continue;
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const data = line.slice(5).trim();
+            if (data === '[DONE]') return;
+            if (!data) continue;
 
-                // Parse the text for code blocks
-                const blocks = parseCodeBlocks(text);
-                
-                for (const block of blocks) {
-                  if (block.type === 'code') {
-                    yield {
-                      type: 'codeBlock',
-                      data: {
-                        filepath: block.filepath!,
-                        content: formatCode(cleanCodeContent(block.content))
-                      }
-                    };
-                  } else {
-                    yield {
-                      type: 'text',
-                      data: block.content
-                    };
-                  }
+            try {
+              const parsed = JSON.parse(data) as StreamedResponse;
+              
+              if (parsed.type === 'artifact' && parsed.artifact) {
+                const artifact = parsed.artifact;
+                if (artifact.type === 'code') {
+                  yield {
+                    type: 'code',
+                    language: artifact.metadata.language || 'typescript',
+                    filepath: artifact.metadata.fileName || '',
+                    content: artifact.content
+                  };
                 }
+              } else if (parsed.type === 'text') {
+                yield {
+                  type: 'text',
+                  language: '',
+                  filepath: '',
+                  content: parsed.content
+                };
               }
+            } catch (e) {
+              console.warn('Parse error:', e);
             }
           }
-        } finally {
-          reader.releaseLock();
         }
       }
     };
   } catch (error) {
-    console.error('Error in generateText:', error);
+    console.error('AI service error:', error);
     throw error;
   }
 }
 
 export interface CodeBlock {
+  type: 'code';
+  language: string;
   filepath: string;
   content: string;
 }
 
-export interface StreamChunk {
-  type: 'text' | 'codeBlock';
-  data: string | CodeBlock;
-} 
+export interface TextBlock {
+  type: 'text';
+  language: string;
+  filepath: string;
+  content: string;
+}
+
+export type StreamBlock = CodeBlock | TextBlock; 

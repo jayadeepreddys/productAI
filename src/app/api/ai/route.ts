@@ -1,65 +1,115 @@
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { ClaudeMessage, StreamedResponse } from '@/types/claude';
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+export async function POST(req: Request) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return NextResponse.json(
+      { error: 'ANTHROPIC_API_KEY is not configured' },
+      { status: 500 }
+    );
+  }
 
-export async function POST(request: Request) {
   try {
-    const { messages } = await request.json();
-
-    if (!ANTHROPIC_API_KEY) {
-      throw new Error('ANTHROPIC_API_KEY is not configured');
-    }
-
-    const client = new Anthropic({
-      apiKey: ANTHROPIC_API_KEY
+    const { messages } = await req.json();
+    
+    const anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
     });
 
-    const response = new TransformStream();
-    const writer = response.writable.getWriter();
-    const encoder = new TextEncoder();
-
-    // Start the streaming request
-    const messageStream = await client.messages.stream({
-      model: 'claude-3-sonnet-20240229',
-      max_tokens: 4096,
-      messages: messages.map((msg: any) => ({
-        role: msg.role === 'user' ? 'user' : 'assistant',
-        content: msg.content
-      })),
+    const response = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20240620',
+      max_tokens: 4000,
+      temperature: 0.1,
+      system: messages[0].content,
+      messages: messages.slice(1),
+      stream: true
     });
 
-    // Handle the stream
-    (async () => {
-      try {
-        for await (const chunk of messageStream) {
-          if (chunk.type === 'content_block_delta') {
-            const text = chunk.delta?.text || '';
-            await writer.write(encoder.encode(`data: ${text}\n\n`));
+    const readable = new ReadableStream({
+      async start(controller) {
+        try {
+          let currentArtifact: StreamedArtifact | null = null;
+
+          for await (const chunk of response) {
+            switch (chunk.type) {
+              case 'content_block_start':
+                if (chunk.content_block.type === 'artifact') {
+                  currentArtifact = {
+                    type: chunk.content_block.metadata?.artifact_type as 'code' | 'text' | 'image',
+                    id: chunk.content_block.id,
+                    content: '',
+                    metadata: {
+                      fileName: chunk.content_block.metadata?.file_name,
+                      language: chunk.content_block.metadata?.language,
+                    }
+                  };
+                }
+                break;
+
+              case 'content_block_delta':
+                if (currentArtifact) {
+                  currentArtifact.content += chunk.delta.text;
+                } else {
+                  const message: StreamedResponse = {
+                    type: 'text',
+                    content: chunk.delta.text
+                  };
+                  controller.enqueue(
+                    new TextEncoder().encode(`data: ${JSON.stringify(message)}\n\n`)
+                  );
+                }
+                break;
+
+              case 'content_block_stop':
+                if (currentArtifact) {
+                  const message: StreamedResponse = {
+                    type: 'artifact',
+                    content: '',
+                    artifact: currentArtifact
+                  };
+                  controller.enqueue(
+                    new TextEncoder().encode(`data: ${JSON.stringify(message)}\n\n`)
+                  );
+                  currentArtifact = null;
+                }
+                break;
+
+              case 'message_stop':
+                controller.enqueue(
+                  new TextEncoder().encode('data: [DONE]\n\n')
+                );
+                controller.close();
+                break;
+            }
           }
+        } catch (error) {
+          console.error('Stream error:', error);
+          controller.error(error);
         }
-      } catch (error) {
-        console.error('Streaming error:', error);
-        // Send error message through the stream
-        await writer.write(encoder.encode(`data: Error: ${error}\n\n`));
-      } finally {
-        await writer.close();
+      },
+      cancel() {
+        response.abort();
       }
-    })();
+    });
 
-    return new Response(response.readable, {
+    return new Response(readable, {
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
       },
     });
-
-  } catch (error) {
-    console.error('AI generation error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+  } catch (error: any) {
+    console.error('AI API error:', error);
+    return NextResponse.json({ 
+      error: 'AI service error',
+      message: error.message,
+      details: error.response?.data || error.toString()
+    }, { 
+      status: error.status || 500 
+    });
   }
-} 
+}
+
+export const dynamic = 'force-dynamic';
