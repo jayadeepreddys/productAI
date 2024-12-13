@@ -14,7 +14,7 @@ export async function generateText(prompt: string, type: 'page' | 'component') {
 - Include complete implementations with all imports
 - Use TypeScript with proper types
 - Follow Next.js 14 best practices
-- Include JSDoc comments for components
+- use tailwind css exclusive for all styling
 - Keep explanations brief and focused
 
 Example response format:
