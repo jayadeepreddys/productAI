@@ -1,44 +1,62 @@
-import fs from 'fs/promises';
-import path from 'path';
 import { projectStore } from '../store/projects';
 
-export async function copyProjectToPreview(projectId: string) {
+export async function deployToPreviewServer(projectId: string) {
   try {
-    const project = projectStore.getProjects().find(p => p.id === projectId);
+    if (!projectId) {
+      throw new Error('Project ID is required');
+    }
+
+    // Get all projects to check if the project exists
+    const projects = projectStore.getProjects();
+    const project = projects.find(p => p.id === projectId);
+    
     if (!project) {
-      throw new Error('Project not found');
+      console.error('Available projects:', projects.map(p => ({ id: p.id, name: p.name })));
+      throw new Error(`Project with ID ${projectId} not found`);
     }
 
     const pages = projectStore.getProjectPages(projectId);
     const components = projectStore.getProjectComponents(projectId);
 
-    // Create directories
-    const previewDir = path.join(process.cwd(), '../preview-server/src/app');
-    const componentsDir = path.join(process.cwd(), '../preview-server/src/components');
-
-    await fs.mkdir(previewDir, { recursive: true });
-    await fs.mkdir(componentsDir, { recursive: true });
-
-    // Copy pages
-    for (const page of pages || []) {
-      if (page.path && page.content) {
-        const pagePath = path.join(previewDir, page.path);
-        await fs.mkdir(path.dirname(pagePath), { recursive: true });
-        await fs.writeFile(pagePath, page.content);
-      }
+    if (!pages && !components) {
+      throw new Error('No pages or components found for this project');
     }
 
-    // Copy components
-    for (const component of components || []) {
-      if (component.name && component.content) {
-        const componentPath = path.join(componentsDir, `${component.name}.tsx`);
-        await fs.writeFile(componentPath, component.content);
-      }
+    // Prepare the project data
+    const projectData = {
+      id: projectId,
+      name: project.name,
+      pages: pages?.map(page => ({
+        path: page.path,
+        content: page.content
+      })) || [],
+      components: components?.map(component => ({
+        name: component.name,
+        content: component.content || component.code
+      })) || []
+    };
+
+    // Send to preview server
+    const response = await fetch('http://localhost:3001/api/preview/deploy', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      mode: 'cors',
+      credentials: 'omit',
+      body: JSON.stringify(projectData)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `Deploy failed: ${response.statusText}`);
     }
 
-    return true;
+    const result = await response.json();
+    return result.success;
+
   } catch (error) {
-    console.error('Failed to copy project to preview:', error);
-    return false;
+    console.error('Failed to deploy to preview:', error);
+    throw error;
   }
 } 

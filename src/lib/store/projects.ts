@@ -1,5 +1,4 @@
 import { ProjectData } from '@/types/project';
-import { samplePages } from './templates';
 import { sampleTemplates } from './templates';
 import { baseStylesTemplate } from '../templates/baseStyles';
 

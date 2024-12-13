@@ -179,6 +179,27 @@ export default function ComponentEditor({ params: paramsPromise }: { params: Pro
     setTimeout(() => setShowToast(false), 3000);
   };
 
+  const handleFileCreation = async (operation: FileOperation) => {
+    switch (operation.type) {
+      case 'component':
+        // Create component in the components directory
+        await createComponent(operation.filepath, operation.content);
+        break;
+      case 'page':
+        // Create page in the app directory
+        await createPage(operation.filepath, operation.content);
+        break;
+      case 'style':
+        // Create or update style file
+        await createStyleFile(operation.filepath, operation.content);
+        break;
+      case 'config':
+        // Handle configuration files
+        await createConfigFile(operation.filepath, operation.content);
+        break;
+    }
+  };
+
   return (
     <div className="h-screen flex relative">
       {/* Fixed Header */}
@@ -229,6 +250,7 @@ export default function ComponentEditor({ params: paramsPromise }: { params: Pro
           <EnhancedAIChat 
             currentContent={config.code}
             onUpdateContent={handleContentChange}
+            onCreateFile={handleFileCreation}
             pageId={params.componentId}
             contextType="component"
           />

@@ -1,150 +1,96 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { Toast } from '@/components/ui/Toast';
+import { deployToPreviewServer } from '@/lib/utils/previewServer';
 import { useParams } from 'next/navigation';
-import { projectStore } from '@/lib/store/projects';
-
-interface DeploymentResult {
-  success: boolean;
-  error?: string;
-  results?: Array<{
-    path: string;
-    success: boolean;
-    size?: number;
-    error?: string;
-  }>;
-}
 
 export function LivePreview() {
   const params = useParams();
   const projectId = params.id as string;
-  const [width, setWidth] = useState<number>(375);
-  const [iframeKey, setIframeKey] = useState(0);
+  
   const [isDeploying, setIsDeploying] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
 
-  const deployToPreview = async () => {
+  const showToastMessage = (message: string, type: 'success' | 'error') => {
+    setToastMessage(message);
+    setToastType(type);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
+  };
+
+  const handleDeploy = async () => {
+    if (!projectId) {
+      showToastMessage('Project ID not found', 'error');
+      return;
+    }
+
     setIsDeploying(true);
     try {
-      const pages = projectStore.getProjectPages(projectId);
-      const components = projectStore.getProjectComponents(projectId);
-
-      const files: Record<string, string> = {};
-
-      // Add pages with proper Next.js structure
-      pages?.forEach(page => {
-        if (page.path && page.content) {
-          const normalizedPath = page.path.replace(/^\//, '').replace(/\.tsx$/, '');
-          // Skip layout and header files
-          if (normalizedPath !== 'layout' && normalizedPath !== 'header') {
-            files[`app/${normalizedPath}/page.tsx`] = `
-              "use client";
-              ${page.content}
-            `;
-          }
-        }
-      });
-
-      // Add components with proper structure
-      components?.forEach(component => {
-        const componentContent = component.content || component.code;
-        if (componentContent) {
-          const componentName = component.name.replace(/\.tsx$/, '');
-          // Skip Header component
-          if (componentName !== 'Header') {
-            const componentPath = `components/${componentName}.tsx`;
-            files[componentPath] = `
-              "use client";
-              ${componentContent}
-            `;
-          }
-        }
-      });
-
-      console.log('Starting deployment with files:', files);
-      const response = await fetch('http://localhost:3001/api/deploy', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          files,
-          projectId 
-        }),
-      });
-
-      const result: DeploymentResult = await response.json();
+      const success = await deployToPreviewServer(projectId);
       
-      if (!result.success) {
-        throw new Error(result.error || 'Deployment failed');
+      if (success) {
+        showToastMessage('Successfully deployed to preview', 'success');
+        setPreviewUrl(`http://localhost:3001/preview/${projectId}`);
+      } else {
+        throw new Error('Deployment failed');
       }
-
-      // Log deployment results
-      result.results?.forEach(file => {
-        if (file.success) {
-          console.log(`✓ ${file.path} (${file.size} bytes)`);
-        } else {
-          console.error(`✗ ${file.path}: ${file.error}`);
-        }
-      });
-
-      console.log('Deployment successful, refreshing preview...');
-      setIframeKey(prev => prev + 1);
     } catch (error) {
       console.error('Deploy error:', error);
+      showToastMessage(
+        'Failed to deploy: ' + (error instanceof Error ? error.message : 'Unknown error'),
+        'error'
+      );
     } finally {
       setIsDeploying(false);
     }
   };
 
   return (
-    <div className="flex flex-col h-full relative max-h-full overflow-hidden">
-      <div className="flex justify-between items-center p-2 border-b border-gray-700 bg-[#111827] shrink-0">
-        <div className="flex items-center space-x-4">
-          <label className="text-sm text-gray-300">Width:</label>
-          <input
-            type="range"
-            min="375"
-            max="1920"
-            value={width}
-            onChange={(e) => setWidth(Number(e.target.value))}
-            className="w-32"
-          />
-          <span className="text-sm text-gray-300">{width}px</span>
-        </div>
-        <div className="flex items-center space-x-2">
-          <button 
-            onClick={deployToPreview}
-            disabled={isDeploying}
-            className={`px-3 py-1 rounded text-sm ${
-              isDeploying 
-                ? 'bg-gray-700 text-gray-400' 
-                : 'bg-blue-500 text-white hover:bg-blue-600'
-            }`}
-          >
-            {isDeploying ? 'Deploying...' : 'Deploy'}
-          </button>
-          <button onClick={() => window.open('http://localhost:3001', '_blank')} className="p-2 text-gray-400 hover:text-gray-200" title="Open in new tab">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-            </svg>
-          </button>
-          <button onClick={() => setIframeKey(prev => prev + 1)} className="p-2 text-gray-400 hover:text-gray-200" title="Refresh preview">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          </button>
-        </div>
+    <div className="flex flex-col space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-semibold">Live Preview</h2>
+        <button
+          onClick={handleDeploy}
+          disabled={isDeploying}
+          className={`px-4 py-2 rounded-md text-white ${
+            isDeploying 
+              ? 'bg-gray-500 cursor-not-allowed' 
+              : 'bg-blue-600 hover:bg-blue-700'
+          }`}
+        >
+          {isDeploying ? 'Deploying...' : 'Deploy'}
+        </button>
       </div>
-      <div className="flex-1 bg-gray-900 overflow-auto min-h-0 max-h-[calc(100%-3rem)]">
-        <div className="mx-auto transition-all duration-200 bg-white h-full" style={{ width: `${width}px`, maxHeight: '100%' }}>
-          <iframe 
-            key={iframeKey}
-            src="http://localhost:3001"
-            className="w-full h-full border-0"
-            style={{ height: '100%' }}
+
+      {previewUrl && (
+        <div className="relative w-full aspect-video rounded-lg overflow-hidden border border-gray-700">
+          <iframe
+            src={previewUrl}
+            className="w-full h-full"
+            style={{ backgroundColor: 'white' }}
           />
         </div>
-      </div>
+      )}
+
+      {!previewUrl && (
+        <div className="flex items-center justify-center h-64 bg-gray-800 rounded-lg border border-gray-700">
+          <p className="text-gray-400">
+            Deploy your changes to see the preview
+          </p>
+        </div>
+      )}
+
+      {showToast && (
+        <Toast 
+          message={toastMessage}
+          type={toastType}
+          onClose={() => setShowToast(false)}
+        />
+      )}
     </div>
   );
 } 

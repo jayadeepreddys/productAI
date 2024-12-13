@@ -19,9 +19,16 @@ interface Message {
   isCodeBlocksExtracted?: boolean;
 }
 
+interface FileOperation {
+  content: string;
+  filepath: string;
+  type: 'component' | 'page' | 'style' | 'config';
+}
+
 interface EnhancedAIChatProps {
   currentContent: string;
   onUpdateContent: (content: string) => void;
+  onCreateFile?: (operation: FileOperation) => Promise<void>;
   pageId: string;
   contextType?: 'component' | 'page';
 }
@@ -36,6 +43,7 @@ interface StreamBlock {
 export default function EnhancedAIChat({ 
   currentContent, 
   onUpdateContent, 
+  onCreateFile,
   pageId,
   contextType = 'page'
 }: EnhancedAIChatProps) {
@@ -171,10 +179,21 @@ ${currentContent || '// No content yet'}
     return 'config';
   };
 
-  const handleApplyChanges = async (block: CodeBlock) => {
+  const handleApplyChanges = async (filepath: string, code: string, type: string) => {
     try {
-      await onUpdateContent(block.content);
-      // Show success toast or feedback
+      const fileOperation: FileOperation = {
+        content: code,
+        filepath,
+        type: type as FileOperation['type']
+      };
+
+      if (onCreateFile) {
+        // Use the new file creation handler if provided
+        await onCreateFile(fileOperation);
+      } else {
+        // Fallback to updating current content (for backward compatibility)
+        await onUpdateContent(code);
+      }
     } catch (error) {
       console.error('Failed to apply changes:', error);
     }
@@ -342,7 +361,7 @@ ${currentContent || '// No content yet'}
                                 </div>
                                 <div className="flex space-x-2">
                                   <button
-                                    onClick={() => onUpdateContent(code)}
+                                    onClick={() => handleApplyChanges(filepath, code, type)}
                                     className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-md"
                                   >
                                     {type === 'component' ? 'Create Component' :
@@ -369,14 +388,18 @@ ${currentContent || '// No content yet'}
                     {/* Batch Actions */}
                     <div className="border-t border-gray-700 pt-4 flex space-x-3">
                       <button
-                        onClick={() => {
-                          const allCode = message.content.split('[Artifact:').slice(1)
-                            .map(part => {
-                              const codeContent = part.slice(part.indexOf('```') + 3);
-                              return codeContent.slice(0, codeContent.indexOf('```')).trim();
-                            })
-                            .join('\n\n');
-                          onUpdateContent(allCode);
+                        onClick={async () => {
+                          const files = message.content.split('[Artifact:').slice(1).map(part => {
+                            const filepath = part.slice(0, part.indexOf(']'));
+                            const codeContent = part.slice(part.indexOf('```') + 3);
+                            const code = codeContent.slice(0, codeContent.indexOf('```')).trim();
+                            const { type } = getFileTypeStyles(filepath);
+                            return { filepath, code, type };
+                          });
+
+                          for (const file of files) {
+                            await handleApplyChanges(file.filepath, file.code, file.type);
+                          }
                         }}
                         className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-md"
                       >
