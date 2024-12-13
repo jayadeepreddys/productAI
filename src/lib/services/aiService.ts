@@ -14,6 +14,8 @@ export async function generateText(prompt: string, type: 'page' | 'component') {
 src/
 ├── app/                    # App Router directory
 │   ├── (auth)/            # Grouped auth routes
+│   │   ├── data.ts        # Page-specific data
+│   │   └── types.ts       # Page-specific types
 │   ├── api/               # API routes
 │   ├── layout.tsx         # Root layout
 │   ├── page.tsx           # Home page
@@ -22,10 +24,14 @@ src/
 │   ├── ui/               # Basic UI components
 │   └── shared/           # Complex shared components
 ├── lib/                   # Utility functions & libraries
-├── types/                # TypeScript type definitions
+├── types/                # Global TypeScript type definitions
 └── styles/               # Component styles
 
 When writing code:
+- Keep page-specific types and data files within their respective page directories:
+  * For example: src/app/dashboard/types.ts
+  * For example: src/app/dashboard/data.ts
+- Only use the root types/ directory for shared/global types
 - Create separate code artifacts for each file
 - Include complete implementations with all imports
 - Calculate relative paths correctly based on file location:
@@ -135,11 +141,30 @@ import { type ClassValue } from '../types';
               if (parsed.type === 'artifact' && parsed.artifact) {
                 const artifact = parsed.artifact;
                 if (artifact.type === 'code') {
+                  let cleanedContent = artifact.content
+                    // Remove typescript/tsx/ts file path patterns
+                    .replace(/^(typescript|tsx|ts):.*?(\r?\n|\r|$)/, '')
+                    // Remove just file path patterns
+                    .replace(/^.*?(src\/.*?\.[t|j]sx?)(\r?\n|\r|$)/, '')
+                    // Remove any remaining language identifier lines
+                    .replace(/^(typescript|tsx|ts)(\r?\n|\r|$)/, '')
+                    // Clean up any extra newlines at the start
+                    .replace(/^[\r\n]+/, '')
+                    .trim();
+
+                  // Check first 30 words for language identifiers
+                  const firstPart = cleanedContent.split(/\s+/).slice(0, 30).join(' ');
+                  if (firstPart.match(/^(typescript|tsx|ts)(\s|$)/i)) {
+                    cleanedContent = cleanedContent
+                      .replace(/^(typescript|tsx|ts)(\s|$)/i, '')
+                      .trim();
+                  }
+
                   yield {
                     type: 'code',
                     language: artifact.metadata.language || 'typescript',
                     filepath: artifact.metadata.fileName || '',
-                    content: artifact.content
+                    content: cleanedContent
                   };
                 }
               } else if (parsed.type === 'text') {

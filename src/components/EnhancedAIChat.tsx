@@ -193,12 +193,42 @@ ${currentContent || '// No content yet'}
     return 'config';
   };
 
+  // Add this helper function at component level
+  const cleanCodeContent = (code: string): string => {
+    // Split the code into lines
+    const lines = code.split('\n');
+    
+    // Check first three lines for metadata and remove them if found
+    for (let i = 0; i < Math.min(3, lines.length); i++) {
+      if (lines[i].match(/^(typescript|tsx|ts):.+/)) {
+        lines.splice(i, 1);
+        i--; // Adjust index after removal
+      }
+    }
+    
+    // Rejoin the lines and trim whitespace
+    let cleanedCode = lines.join('\n').trim();
+    
+    // Check first 20 words for language identifiers
+    const firstPart = cleanedCode.split(/\s+/).slice(0, 20).join(' ');
+    if (firstPart.match(/^(typescript|tsx|ts)(\s|$)/i)) {
+      cleanedCode = cleanedCode
+        .replace(/^(typescript|tsx|ts)(\s|$)/i, '')
+        .trim();
+    }
+    
+    return cleanedCode;
+  };
+
   const handleApplyChanges = async (filepath: string, code: string, type: string) => {
     try {
       console.log('=== Starting Save Operation ===');
       console.log('Project ID:', projectId);
       console.log('Original Type:', type);
       console.log('File Path:', filepath);
+
+      // Clean the code content before saving
+      const cleanedCode = cleanCodeContent(code);
 
       // Determine the correct type based on filepath
       let fileType = type;
@@ -232,25 +262,25 @@ ${currentContent || '// No content yet'}
         const existingComponent = existingComponents.find(c => c.name === componentName);
         
         if (existingComponent) {
-          // Update existing component
+          // Update existing component with cleaned code
           projectStore.updateComponent(projectId, existingComponent.id, {
-            code: code,
+            code: cleanedCode,
           });
           console.log(`Updated existing component: ${componentName}`);
         } else {
-          // Create new component
+          // Create new component with cleaned code
           const newComponent = projectStore.addComponent(projectId, {
             name: componentName,
             type: 'ui',
-            code: code,
+            code: cleanedCode,
             preview: '',
           });
           console.log('Created new component:', newComponent);
         }
       } 
       else if (fileType === 'page') {
-        // Extract function name from the code for the page name
-        const functionMatch = code.match(/export\s+default\s+function\s+(\w+)/);
+        // Extract function name from the cleaned code for the page name
+        const functionMatch = cleanedCode.match(/export\s+default\s+function\s+(\w+)/);
         let pageName = functionMatch ? functionMatch[1].replace('Page', '') : '';
         
         // If no function name found, use filepath
@@ -260,45 +290,36 @@ ${currentContent || '// No content yet'}
         
         // Clean up the name
         pageName = pageName
-          .replace(/([A-Z])/g, ' $1') // Add spaces before capitals
-          .trim() // Remove extra spaces
-          .replace(/^\w/, c => c.toUpperCase()); // Capitalize first letter
+          .replace(/([A-Z])/g, ' $1')
+          .trim()
+          .replace(/^\w/, c => c.toUpperCase());
         
-        // Generate path from name
         const pagePath = pageName.toLowerCase() === 'home' 
           ? '/' 
           : `/${pageName.toLowerCase().replace(/\s+/g, '-')}`;
-
-        console.log('Page Details:', {
-          name: pageName,
-          path: pagePath,
-          projectId: projectId
-        });
 
         // Check if page already exists
         const existingPages = projectStore.getProjectPages(projectId);
         const existingPage = existingPages.find(p => p.path === pagePath);
 
         if (existingPage) {
-          // Update existing page
+          // Update existing page with cleaned code
           projectStore.updatePage(projectId, existingPage.id, {
-            content: code,
+            content: cleanedCode,
           });
           console.log(`Updated existing page: ${pageName} at ${pagePath}`);
         } else {
-          // Create new page
+          // Create new page with cleaned code
           const newPage = projectStore.addPage(projectId, {
             name: pageName,
             path: pagePath,
             description: `Auto-generated page: ${pageName}`,
             components: [],
             apis: [],
-            content: code,
+            content: cleanedCode,
           });
           console.log('Created new page:', newPage);
         }
-      } else {
-        console.warn('Unhandled file type:', fileType);
       }
 
       console.log('=== Save Operation Complete ===');
@@ -384,18 +405,6 @@ ${currentContent || '// No content yet'}
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // Helper function to clean code content
-  const cleanCodeContent = (content: string): string => {
-    return content
-      .replace(/([a-zA-Z]+)=/g, '$1=') // Fix attribute spacing
-      .replace(/\s+/g, ' ') // Normalize whitespace
-      .replace(/([^>])\n/g, '$1 ') // Remove newlines not after closing tags
-      .split('\n')
-      .map(line => line.trim())
-      .join('\n')
-      .trim();
   };
 
   // Add this helper function at component level
